@@ -1,0 +1,197 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The slowdown starts in llm-gateway, the upstream LLM provider path. Its latency rose from about 1,400 ms to about 4,200 ms and its error rate from 0.006 to 0.256 between 13:50 and 14:00 UTC. Logs show the provider returning 429 rate-limited responses from 13:55, with retries and a growing share of requests served by the fallback model. Orchestrator calls llm-gateway with weight 0.7, and its latency (last 2621 ms) and error rate (last 0.173) are consistent with inheriting this. llm-gateway request rate and token volume were flat, so the 429s do not look like a traffic surge on our side. The only changes in the window are two minor copy deploys (order-router 13:24, auth-kyc 13:26), which are unlikely causes. Why the provider began rate limiting (quota, plan or provider-side throttling) could not be determined from the available data.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The LLM provider began rate limiting (HTTP 429) llm-gateway around 13:50-13:55. Retries and fallback-model routing raised llm-gateway latency and errors, and orchestrator and user-facing replies degraded as a result.",
+   "component": "llm-gateway",
+   "cause_type": "upstream_provider_rate_limiting",
+   "score": 6.6,
+   "confidence": 0.767,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "llm-gateway latency was stable near 1,400 ms until 13:40, rose at 13:50 and plateaued above 4,000 ms from 14:00",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "llm-gateway error rate jumped from baseline 0.006 starting at 13:50, reaching 0.256 by 14:00",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "llm-gateway logged provider 429 rate-limit errors from 13:55",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "Fallback model usage climbed quickly as the 429s began",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "llm-gateway token throughput stayed within a narrow range over the window, so there is no sign of our own load surge",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Orchestrator depends heavily on llm-gateway (weight 0.7)",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "Orchestrator latency and error rate are elevated at the end of the window, consistent with inheriting llm-gateway degradation",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A recent change caused the degradation, for example the order-router or auth-kyc deploys.",
+   "component": "order-router",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "The only changes in the window are minor copy deploys on unrelated services, both before the 13:50 onset",
+     "evidence_ids": [
+      "E-008"
+     ]
+    },
+    {
+     "text": "llm-gateway latency was stable near 1,400 ms until 13:40, rose at 13:50 and plateaued above 4,000 ms from 14:00",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "llm-gateway error rate jumped from baseline 0.006 starting at 13:50, reaching 0.256 by 14:00",
+     "evidence_ids": [
+      "E-002"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "llm-gateway latency was stable near 1,400 ms until 13:40, rose at 13:50 and plateaued above 4,000 ms from 14:00",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "llm-gateway error rate jumped from baseline 0.006 starting at 13:50, reaching 0.256 by 14:00",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "llm-gateway logged provider 429 rate-limit errors from 13:55",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Fallback model usage climbed quickly as the 429s began",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "llm-gateway token throughput stayed within a narrow range over the window, so there is no sign of our own load surge",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Orchestrator depends heavily on llm-gateway (weight 0.7)",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "Orchestrator latency and error rate are elevated at the end of the window, consistent with inheriting llm-gateway degradation",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "The only changes in the window are minor copy deploys on unrelated services, both before the 13:50 onset",
+   "evidence_ids": [
+    "E-008"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why the provider started returning 429s (quota or plan limit, account-level throttling, or a provider incident) is not determined.",
+  "The WARN/ERROR log query was truncated (259 matches). Only entries up to about 13:57 were seen, so the later pattern was not read directly.",
+  "Exact onset: the metric shows a deviation in the 13:50 bucket, but the first 429 log seen is at 13:55:20. The 13:50-13:55 interval was not examined at finer granularity.",
+  "The path from slow replies to late notifications was not verified. msg-delivery and portfolio-consumer were not examined, and the outbound-msgs queue looked healthy."
+ ],
+ "actions": [
+  {
+   "text": "Check the LLM provider dashboard and status page for quota, rate-limit tier or throttling changes starting around 13:50 UTC. Request a limit increase or raise the quota.",
+   "rationale": "429s from the provider are the first visible failure, and our own token volume and request rate were flat.",
+   "evidence_ids": [
+    "E-003",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Review llm-gateway retry and backoff settings and cap retries or add jitter. Consider routing traffic to a secondary provider or fallback model with enough capacity.",
+   "rationale": "Retries with backoff add latency to every affected request, and fallback usage is rising.",
+   "evidence_ids": [
+    "E-001",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Add alerting on llm-gateway 429 count and fallback_pct, and on orchestrator latency tied to llm-gateway latency.",
+   "rationale": "The signal began at 13:50 but was reported only at 14:20.",
+   "evidence_ids": [
+    "E-002",
+    "E-007"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "No rollback of the order-router or auth-kyc deploys is warranted now. Re-evaluate only if provider-side checks come back clean.",
+   "rationale": "Both are minor copy changes unrelated to the LLM path and predate onset.",
+   "evidence_ids": [
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 19,
+  "tool_attempts": 19,
+  "llm_calls": 6,
+  "tokens_in": 36409,
+  "tokens_out": 9803,
+  "rounds": 0,
+  "elapsed_s": 95.9
+ },
+ "dropped_claims": 0
+}

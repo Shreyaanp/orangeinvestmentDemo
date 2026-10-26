@@ -1,0 +1,21 @@
+{
+  "id": "s03_config_not_deploy",
+  "seed": 3,
+  "start": "2026-03-16T10:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "Order placement is failing intermittently, and customers see timeouts when confirming trades. Started around 11:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "broker-gateway", "cause_type": "config_change_timeout", "description": "A configuration change lowered broker-gateway's broker request timeout (3000ms to 800ms), so many broker calls abort with timeouts. No deploy was involved."},
+      "effects": [
+        {"target": "broker-gateway", "metric": "err_rate", "op": "add", "value": 0.22, "ramp_min": 2},
+        {"target": "broker-gateway", "metric": "latency_ms", "op": "mul", "value": 0.6}
+      ],
+      "logs": [{"service": "broker-gateway", "level": "ERROR", "msg": "broker request aborted: exceeded configured timeout of 800ms", "per_min": 5}],
+      "changes": [{"kind": "config", "service": "broker-gateway", "ref": "cfg-broker-timeout-ms", "note": "BROKER_TIMEOUT_MS 3000 -> 800", "offset_min": 0}]
+    }
+  ],
+  "trap": "deploy history is clean; the only change is a config change that must be looked up explicitly"
+}

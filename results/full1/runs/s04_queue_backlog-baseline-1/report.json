@@ -1,0 +1,201 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Portfolio-update notifications are delayed because aa-sync is being CPU-throttled, which slows its responses. From about 09:55 UTC, aa-sync throttling rose from 19% to 85% of periods and p95 latency rose from 177ms to 555ms. portfolio-consumer's calls to aa-sync (weight 0.8) began timing out, and the portfolio-updates consume rate fell from about 46/s to about 14.8/s. Publish rate stayed at about 40/s, so the portfolio-updates queue backlog grew from 0 at 09:40 to about 1067 by 10:40. The only changes today were log-level tweaks on other services, so what triggered the throttling is not identified. Messages that never arrived are not explained: the dead-letter queue is empty and the backlog is only about 50 minutes old.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync is CPU-throttled from about 09:55, making it slow. portfolio-consumer's calls to it time out, consumption of portfolio-updates falls, and the backlog delays notifications.",
+   "component": "aa-sync",
+   "cause_type": "cpu_throttling",
+   "score": 6.4,
+   "confidence": 0.762,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "aa-sync reported CPU throttling beginning at 09:55 and worsening",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Throttling reached 85% of periods with p95 555ms",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "portfolio-consumer calls to aa-sync started timing out",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "Consume rate on portfolio-updates roughly dropped to a third after 09:30",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "Queue depth started growing at 09:50 and kept climbing",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Publish rate stayed steady, so the backlog comes from slow consumption",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate stayed low, so the consumer itself is not failing",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The trigger for the throttling is unknown. It is likely a CPU limit too low for the workload, or contention on the host. It is not a tracked change and not a rise in request rate.",
+   "component": "aa-sync",
+   "cause_type": "insufficient_cpu_limit",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "aa-sync request rate was steady, so throttling is not explained by a load spike",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Only log-level deploys on other services; none on aa-sync and no config, migration or flag changes",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync reported CPU throttling beginning at 09:55 and worsening",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Throttling reached 85% of periods with p95 555ms",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "portfolio-consumer calls to aa-sync started timing out",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Consume rate on portfolio-updates roughly dropped to a third after 09:30",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "Queue depth started growing at 09:50 and kept climbing",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Publish rate stayed steady, so the backlog comes from slow consumption",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "aa-sync request rate was steady, so throttling is not explained by a load spike",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "Only log-level deploys on other services; none on aa-sync and no config, migration or flag changes",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "portfolio-consumer error rate stayed low, so the consumer itself is not failing",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "What triggered the aa-sync CPU throttling at about 09:55. No change touched aa-sync and its request rate was steady.",
+  "Why some notifications never arrived. The dead-letter queue is 0 and the backlog is only about an hour old, while the report says hours of delay.",
+  "Whether msg-delivery or outbound-msgs contribute to the delay. They were not examined.",
+  "The portfolio-consumer WARN logs were truncated at 30 of 137 entries, and the aa-sync WARN logs at 30 of 57."
+ ],
+ "actions": [
+  {
+   "text": "Raise the aa-sync CPU limit or request, or scale out replicas, and check for node-level CPU contention.",
+   "rationale": "Throttling at 85% of periods drives aa-sync latency and the consumer timeouts.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After aa-sync recovers, watch the portfolio-updates depth and consume rate until the backlog drains. Add temporary portfolio-consumer capacity if it drains too slowly.",
+   "rationale": "The backlog was still growing at the latest reading, and publish rate stays at about 40/s.",
+   "evidence_ids": [
+    "E-004",
+    "E-005",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Find what changed for aa-sync around 09:50-09:55: resource limits, node placement, a noisy neighbour, or a background consent-refresh job.",
+   "rationale": "Request rate was steady and no tracked change touched aa-sync, so the trigger is unknown.",
+   "evidence_ids": [
+    "E-007",
+    "E-008"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Check whether any notifications were lost, using portfolio-consumer and msg-delivery logs. Add alerting on aa-sync cpu_throttle_pct and portfolio-updates depth.",
+   "rationale": "Users report missing notifications, but the dead-letter queue is empty and the backlog is only about an hour old.",
+   "evidence_ids": [
+    "E-009",
+    "E-005"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 23,
+  "tool_attempts": 23,
+  "llm_calls": 8,
+  "tokens_in": 57668,
+  "tokens_out": 11116,
+  "rounds": 0,
+  "elapsed_s": 146.3
+ },
+ "dropped_claims": 0
+}

@@ -1,0 +1,50 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "worker",
+      "cause_type": "stale_cache_config",
+      "description": "A commit raised session.ttl_s from 300s to 86400s, so the worker answers balance questions from portfolio snapshots cached up to a day ago instead of fetching fresh values from RDS.",
+      "onset": "2026-10-23T10:38:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "worker",
+          "level": null,
+          "contains": "3d293d3",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-23T10:38:00Z",
+          "end": "2026-10-23T11:30:00Z"
+        },
+        {
+          "kind": "code",
+          "service": "worker",
+          "level": null,
+          "contains": "config/app.json",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-23T10:38:00Z",
+          "end": "2026-10-23T11:30:00Z"
+        },
+        {
+          "kind": "conversation",
+          "service": "worker",
+          "level": null,
+          "contains": "portfolio snapshot from session cache",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-23T10:38:00Z",
+          "end": "2026-10-23T11:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "Everything looks healthier (fewer RDS queries, lower latency); there are no errors anywhere. Only the conversation context and the diff show it."
+}

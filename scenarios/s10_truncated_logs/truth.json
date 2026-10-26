@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "auth-kyc",
+      "cause_type": "vendor_outage",
+      "description": "The external KYC vendor used by auth-kyc was down (connection refused), so KYC and signup checks failed.",
+      "onset": "2026-03-25T09:55:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "auth-kyc",
+          "level": "ERROR",
+          "contains": "kyc vendor connection refused: tcp connect to kyc-provider failed",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-25T09:55:00Z",
+          "end": "2026-03-25T11:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "the log tool caps results at 50, so the decisive lines only appear after narrowing the query"
+}

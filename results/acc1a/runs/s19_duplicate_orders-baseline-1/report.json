@@ -1,0 +1,162 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Duplicate orders began at about 14:10 UTC, right after the redis-cache config change cut maxmemory from 4gb to 1gb with allkeys-lru eviction. Redis immediately hit maxmemory and evicted 6000-12000 keys per event. From 14:11:11, order-router logged 'idempotency key not found for retried webhook, treating as new order', so retried webhooks were executed again. The best-supported root cause is that the idempotency keys live in redis-cache and were evicted, though no log names the key store directly. The order-router deploy at 14:02 (dependency bump) is a weaker candidate: duplicates were 0.0 at 14:05, after that deploy. duplicate_orders plateaued at 18.0 and was still elevated at 14:35.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The redis-cache maxmemory reduction (4gb to 1gb) caused LRU eviction of idempotency keys. order-router then treated retried webhooks as new orders and executed duplicates.",
+   "component": "redis-cache",
+   "cause_type": "config_change_cache_eviction_of_idempotency_keys",
+   "score": 5.487,
+   "confidence": 0.733,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "redis-cache maxmemory was cut from 4gb to 1gb at 14:10, with LRU eviction",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Redis began mass eviction right after the change",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "order-router started treating retried webhooks as new orders at 14:11:11 and kept doing so",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "duplicate_orders was 0 before 14:10 and rose from then",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "redis-cache memory reached 97% with 12000 keys evicted",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "order-router depends on redis-cache",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The order-router 00601 dependency bump broke idempotency handling.",
+   "component": "order-router",
+   "cause_type": "bad_deploy_regression",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "redis-cache maxmemory was cut from 4gb to 1gb at 14:10, with LRU eviction",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Redis began mass eviction right after the change",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "order-router started treating retried webhooks as new orders at 14:11:11 and kept doing so",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "duplicate_orders was 0 before 14:10 and rose from then",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "redis-cache memory reached 97% with 12000 keys evicted",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "order-router depends on redis-cache",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "No log or dependency data shows that idempotency keys live in redis-cache.",
+  "The order-router-00601 deploy has not been ruled out as a contributing factor.",
+  "Why webhooks were retried at all is not established. inbound-msgs redeliveries looked steady, but only summary stats were checked.",
+  "Exact count and customer impact of duplicate orders is unknown. The log queries were truncated."
+ ],
+ "actions": [
+  {
+   "text": "Roll back redis-cache maxmemory to 4gb, or at least size it above the working set, and confirm evictions stop.",
+   "rationale": "The config change at 14:10 matches the onset of evictions and duplicate orders.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Identify and reconcile the duplicate orders executed since 14:10 (about 18 per the metric). Reverse them or notify affected customers.",
+   "rationale": "Duplicate executions are customer-impacting and duplicate_orders was still 18.0 at 14:35.",
+   "evidence_ids": [
+    "E-003",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Move idempotency keys to durable storage (postgres, or a Redis keyspace with no eviction and a TTL). Fail closed when a key is missing instead of treating the webhook as a new order.",
+   "rationale": "Order safety should not depend on an evictable cache.",
+   "evidence_ids": [
+    "E-003",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Verify where order-router stores idempotency keys. Check whether deploy order-router-00601 changed the idempotency code.",
+   "rationale": "This confirms H1 and rules out H2, which the current evidence cannot separate.",
+   "evidence_ids": [
+    "E-007",
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 18,
+  "tool_attempts": 18,
+  "llm_calls": 6,
+  "tokens_in": 43678,
+  "tokens_out": 11662,
+  "rounds": 0,
+  "elapsed_s": 133.6
+ },
+ "dropped_claims": 0
+}

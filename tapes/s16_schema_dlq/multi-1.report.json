@@ -1,0 +1,538 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most probable root cause is the aa-sync deploy aa-sync-00633 ('normalize holdings payload v2', 11:19), which likely changed the payload published to portfolio-updates so some messages carry 'positions' instead of 'holdings'. portfolio-consumer rejects them from 11:20:04, causing dead-lettering and redeliveries. aa-sync is the only publisher of the queue and the only change near onset, but this is inferred from timing and topology: the diff is unavailable, no rejected payload was sampled, and logs do not name the producer. Separately, the dead-letter total froze at 2500 from 11:49 while the ready backlog keeps growing and rejections continue, so the DLQ count is no longer a reliable measure of damage. Treat the backlog as the live indicator; the cause of the plateau is unresolved.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The aa-sync deploy aa-sync-00633 ('normalize holdings payload v2', 11:19) changed the payload aa-sync publishes to portfolio-updates so that some messages carry 'positions' instead of 'holdings'; portfolio-consumer's schema validation rejects them from 11:20, causing dead-lettering and redeliveries.",
+   "component": "aa-sync",
+   "cause_type": "bad_code_release_payload_schema_change",
+   "score": 1.75,
+   "confidence": 0.467,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "aa-sync-00633 ('normalize holdings payload v2') deployed at 11:19, one minute before onset, and was the only aa-sync change in the window.",
+     "evidence_ids": [
+      "E-049",
+      "E-079"
+     ]
+    },
+    {
+     "text": "aa-sync is the only publisher to portfolio-updates, and portfolio-consumer is the only consumer, so the 'positions' messages sit on aa-sync's output path.",
+     "evidence_ids": [
+      "E-045",
+      "E-046",
+      "E-047"
+     ]
+    },
+    {
+     "text": "The consumer's first ERROR at 11:20:04 is a schema failure reporting unexpected 'positions' (expected 'holdings'). No schema rejection occurred before then, and dead-lettering began at 11:20:00.",
+     "evidence_ids": [
+      "E-053",
+      "E-100",
+      "E-099"
+     ]
+    },
+    {
+     "text": "The consumer still processes some messages after onset, which fits a subset of messages being rejected rather than a total failure.",
+     "evidence_ids": [
+      "E-118",
+      "E-059"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The deploy record has no source or URL, so the diff is unavailable and the link between the note and a holdings-to-positions change is unverified.",
+     "evidence_ids": [
+      "E-050"
+     ]
+    },
+    {
+     "text": "aa-sync logs show no errors, no payload-version marker and no instance identifier. Publish lines continue after the deploy but cannot be tied to aa-sync-00633 or to the 'positions' field.",
+     "evidence_ids": [
+      "E-057",
+      "E-066",
+      "E-075",
+      "E-128"
+     ]
+    },
+    {
+     "text": "It is unexplained why only about half of users are affected. Nothing shows aa-sync-00633 applies to only some accounts, and the 0.60 error ratio has not been reconciled with the user share.",
+     "evidence_ids": [
+      "E-086",
+      "E-008"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H4",
+   "statement": "Separately from the trigger, the dead-letter total froze at 2500 from 11:49 while the ready backlog keeps growing, so dead-lettering has stopped (a DLQ cap or counter/logging stop) or consumers are holding messages unacked or requeuing them; redeliveries of 22-24 per event suggest the same rejected messages are being retried.",
+   "component": "rabbitmq",
+   "cause_type": "dead_letter_cap_or_consumer_stall",
+   "score": 1.3,
+   "confidence": 0.394,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The dead-letter total was still rising (2167 at 11:45, 2417 at 11:48) and then stopped at 2500 from 11:49:05. It stayed at 2500 through 12:19 while the ready backlog grew from 511 to 1201 with 3 consumers still reported.",
+     "evidence_ids": [
+      "E-060",
+      "E-061",
+      "E-062",
+      "E-063"
+     ]
+    },
+    {
+     "text": "It is likely that the steady 22-24 redeliveries per event reflect the same rejected messages being retried. This is an assumption not verified against broker counters.",
+     "evidence_ids": [
+      "E-097"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "No broker-side evidence distinguishes a cap, a stopped counter or unacked holding. No policy was found in logs, though that is only an absence in logs and not proof that no policy exists.",
+     "evidence_ids": [
+      "E-068"
+     ]
+    },
+    {
+     "text": "The broker error rate is 0, and the redelivery rate did not change at 11:49, so nothing observable changed at the plateau.",
+     "evidence_ids": [
+      "E-016",
+      "E-095"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H2",
+   "statement": "A producer other than aa-sync (e.g. portfolio-svc) began publishing a newer payload schema with 'positions' to portfolio-updates at about 11:20, which the consumer rejects.",
+   "component": "portfolio-svc",
+   "cause_type": "producer_schema_drift",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "It is an unverified assumption that a producer such as portfolio-svc began emitting 'positions'.",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The graph lists aa-sync as the only publisher to portfolio-updates, so portfolio-svc is not shown publishing there.",
+     "evidence_ids": [
+      "E-046",
+      "E-052"
+     ]
+    },
+    {
+     "text": "portfolio-svc error rate stayed low, and its logs show no 'positions' matches. Absence in logs is not proof, though.",
+     "evidence_ids": [
+      "E-005",
+      "E-074"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H3",
+   "statement": "portfolio-consumer regressed in its own schema validation so it rejects payloads that are valid, producing the 'positions' rejections.",
+   "component": "portfolio-consumer",
+   "cause_type": "consumer_validation_regression",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "The consumer's only deploy before onset was a 'log level tweak' 30 minutes earlier, and its error rate was at baseline until 11:20. The second consumer deploy came after onset.",
+     "evidence_ids": [
+      "E-032",
+      "E-002",
+      "E-033"
+     ]
+    },
+    {
+     "text": "Some messages are still processed successfully, and no other change was recorded near onset.",
+     "evidence_ids": [
+      "E-118",
+      "E-025"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "Before onset, portfolio-consumer err_rate ranged from 0.002 to 0.004 between 10:50 and 11:19.",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "portfolio-svc err_rate stayed low across the window (max 0.004), which weakens the idea that the producer is failing outright.",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "The broker's own error rate on rabbitmq was 0 over the window, which weakens the idea that the broker itself is failing.",
+   "evidence_ids": [
+    "E-016"
+   ]
+  },
+  {
+   "text": "The all-service query was complete: total 3, not truncated and not partial. No config, migration, flag or other non-deploy change was returned for any service in the window.",
+   "evidence_ids": [
+    "E-025"
+   ]
+  },
+  {
+   "text": "portfolio-consumer had a deploy at 10:50 UTC with the note 'log level tweak', 30 minutes before onset and unlikely to be the trigger.",
+   "evidence_ids": [
+    "E-032"
+   ]
+  },
+  {
+   "text": "portfolio-consumer had a second deploy at 12:11 UTC with the note 'metrics label rename'. It occurs after onset and cannot explain it.",
+   "evidence_ids": [
+    "E-033"
+   ]
+  },
+  {
+   "text": "aa-sync publishes to the portfolio-updates queue (direct graph edge, not only a synchronous response provider).",
+   "evidence_ids": [
+    "E-045"
+   ]
+  },
+  {
+   "text": "The portfolio-updates queue lists aa-sync as its only publisher in the graph.",
+   "evidence_ids": [
+    "E-046"
+   ]
+  },
+  {
+   "text": "The portfolio-updates queue lists portfolio-consumer as its only consumer in the graph.",
+   "evidence_ids": [
+    "E-047"
+   ]
+  },
+  {
+   "text": "aa-sync deployed aa-sync-00633 at 11:19 UTC, one minute before the reported onset. Only one change was returned for aa-sync in 11:10 to 11:25 across all kinds, and no config, migration or flag change was recorded.",
+   "evidence_ids": [
+    "E-049"
+   ]
+  },
+  {
+   "text": "The source and url for aa-sync-00633 are null, so its diff and commit message could not be retrieved and the link between the note and the payload field is unverified.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "portfolio-consumer's first schema failure at onset reports an unexpected 'positions' field where it expects 'holdings'. This confirms the consumer sees 'positions' in the payload, but not which service sent it.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "aa-sync logged only unrelated INFO 'aa fetch completed' lines between 11:19 and 11:22, with no error, no publish, and no payload-version line. This is consistent with aa-sync-00633 not logging a schema change at deploy time, though the log does not say whether it changed the payload.",
+   "evidence_ids": [
+    "E-057"
+   ]
+  },
+  {
+   "text": "portfolio-consumer rps stayed in a narrow band (min 37.62, max 42.754, last 40.376) across the window, with no drop at onset. This weakens the idea that the consumer stopped consuming and supports the idea that it is still pulling messages and failing a subset.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "Dead-letter total was still rising just before the plateau, with 2167 at 11:45:07 and 2417 at 11:48:02, so the 2500 value at 11:49:05 is a stop, not a steady state reached earlier.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "The dead-letter counter remained at 2500 in its last logged reading at 12:19:46, so it stayed flat for about 30 minutes after 11:49:05 while dead-lettering activity logs were still being written.",
+   "evidence_ids": [
+    "E-061"
+   ]
+  },
+  {
+   "text": "Ready depth on portfolio-updates kept growing over the same period, from 511 at 11:45:26 to 1201 at 12:19:17, with 3 consumers still reported. This is a growing backlog while the dead-letter count is flat.",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "Earlier ready-depth reading: 511 messages ready with 3 consumers at 11:45:26, so the backlog was already growing before the dead-letter plateau.",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "aa-sync logged only INFO and one unrelated WARN in 11:15–11:25 (no ERROR). Publishing to portfolio-updates continued at 11:15:14, 11:16:01, 11:17:55 and 11:18:00 before the 11:19 deploy window, and one publish line appears at 11:22:49 after it. This does not show a visible aa-sync failure around onset.",
+   "evidence_ids": [
+    "E-066"
+   ]
+  },
+  {
+   "text": "No log line mentioning 'policy' exists for rabbitmq across 10:20–12:20, so no max-length or overflow policy was found in logs. This is an absence in logs, not proof that no policy is configured.",
+   "evidence_ids": [
+    "E-068"
+   ]
+  },
+  {
+   "text": "A portfolio-svc search for 'positions' between 11:15 and 11:30 returned no matches, so portfolio-svc logs do not show the producer emitting that field. This is an absence in logs, not proof that it was not emitted.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "A search for 'v2' in aa-sync INFO logs between 11:18 and 11:25 returned no matches, so there is no log-level version marker from aa-sync at the deploy time.",
+   "evidence_ids": [
+    "E-075"
+   ]
+  },
+  {
+   "text": "aa-sync-00633 is the only aa-sync change returned in the window, and it was deployed at 11:19 UTC with the note 'normalize holdings payload v2', one minute before the reported onset.",
+   "evidence_ids": [
+    "E-079"
+   ]
+  },
+  {
+   "text": "Redelivery event count: the DEBUG 'redeliver' query returned 60 events with no truncation. My tally is 29 events from 11:20:45 to 11:48:19 and 31 from 11:49:11 to 12:19:43, so the rate did not change at 11:49.",
+   "evidence_ids": [
+    "E-095"
+   ]
+  },
+  {
+   "text": "The rabbitmq query for 11:17:00-11:20:10 returned 5 lines, none a rejection. The first dead-letter line is at 11:20:00, after the 11:19:00 deploy window.",
+   "evidence_ids": [
+    "E-099"
+   ]
+  },
+  {
+   "text": "portfolio-consumer logged no schema rejection between 11:17:00 and 11:20:10 before onset. Its last pre-onset line was a normal processed update at 11:19:13.",
+   "evidence_ids": [
+    "E-100"
+   ]
+  },
+  {
+   "text": "portfolio-consumer still logs successful processing after onset, so some messages are accepted while others are rejected.",
+   "evidence_ids": [
+    "E-118"
+   ]
+  },
+  {
+   "text": "aa-sync keeps logging publishes to portfolio-updates after the 11:19 deploy, at 11:22:49, 11:25:00 and 11:28:50. The lines do not name an instance, version or schema, so they cannot separate aa-sync-00633 from other instances.",
+   "evidence_ids": [
+    "E-128"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The producer (likely portfolio-svc) began emitting a 'positions' field at about 11:20 while the consumer still expects 'holdings'. This is a hypothesis; I have not checked portfolio-svc logs or payloads to confirm it.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "The consumer error rate of about 0.60 is a per-message ratio and may not equal the share of affected users (about 50%). The two numbers are not yet reconciled.",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "The graph lists aa-sync as the only publisher to portfolio-updates, so the earlier hypothesis that portfolio-svc publishes to that queue (E-007) is not supported by this graph data. Portfolio-svc may still be involved, but the dependency data does not show it.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "Nothing returned shows that aa-sync-00633 applies only to some accounts. The roughly 50% figure is unexplained by these results.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "Steady redelivery counts of about 22-24 suggest the same rejected messages are being requeued and retried repeatedly, rather than new messages being dead-lettered. This fits the flat DLQ counter (E-061) but is not verified against broker unacked or redelivered counters.",
+   "evidence_ids": [
+    "E-097"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The aa-sync-00633 diff is unavailable (source and url are null), so it is unconfirmed that it introduced 'positions'.",
+  "No rejected or accepted message payload, app-id, producer or x-death header was captured, so the producer of 'positions' is unidentified.",
+  "Why only about half of users are affected is unexplained, and the 0.60 per-message error ratio is unreconciled with the user share. The segmentation by user, shard or account was not run.",
+  "The cause of the dead-letter plateau at 2500 is unknown: cap, counter or logging stop, or unacked and requeued messages. Broker unacked and ack metrics and the DLX config were not available.",
+  "Several log queries were truncated or capped, including the consumer 90-match error set and the 11:49-12:20 WARN/ERROR window, where ERROR lines after about 12:17 are unverified.",
+  "The 4-second gap between the first dead-letter reading (11:20:00) and the first consumer error (11:20:04) could be clock skew, which was not measured.",
+  "portfolio-svc, aa-sync and msg-delivery metrics were only summaries without timestamps. The call budget was exhausted before further checks.",
+  "Redis or cache involvement is neither confirmed nor ruled out. The past incidents INC-0412 and INC-0388 do not match this one.",
+  "No per-user, shard, region, broker, account-type, cohort or instance segmentation was run, so the 50% affected-user pattern is unverified.",
+  "Only summary stats were returned for portfolio-svc, aa-sync and msg-delivery, with no points. Their timelines around 11:20 are unknown, and portfolio-svc rps was not shown to drop.",
+  "portfolio-consumer rps summary (min 37.62, max 42.754) covers the whole window, so it cannot show a step at onset.",
+  "No portfolio-svc logs were queried, so the schema it emits and any producer-side change near 11:20 are unknown.",
+  "The portfolio-updates queue depth, consumer count and dead-letter counts were not queried, so the DLQ growth reported by ops is not verified here.",
+  "The ERROR log query returned 50 of 90 matches (truncated). WARN-level logs were not checked.",
+  "Call budget was reached after 6 calls (4 summaries and 2 detail queries), so the remaining checks were not run.",
+  "Budget was exhausted at 5 calls, so I did not sample dead-lettered payloads or headers, and I could not check payload versions, fields, or user segments.",
+  "No x-death header data was returned (T2-05 empty), so death reasons and counts per reason are unverified. Empty results are not proof that no x-death data exists.",
+  "I did not query inbound-msgs or outbound-msgs, so I cannot say whether they are affected. Publish rate, ack rate, unacked counts and consumer connection drops for portfolio-updates are also unverified.",
+  "portfolio-consumer WARN/ERROR logs were truncated at 11:33:55 of 427 matches, so the later pattern is unknown. The earlier rabbitmq query was filtered on 'portfolio', so connection-drop messages without that word may have been missed.",
+  "portfolio-consumer metrics have no timestamps, so err_rate onset cannot be compared to 11:20. The rabbitmq rps metric is not split by queue.",
+  "No get_dependencies call was made, so aa-sync's downstream consumers (portfolio-svc, portfolio-consumer, portfolio-updates) are unverified.",
+  "Service-specific checks for postgres, broker-gateway, market-data and auth-kyc were not run separately. The all-service query should cover them, but a dedicated check was not done.",
+  "The tool has no view of secret or credential rotations, scheduled jobs or flag percentage rollouts beyond the returned records. Their absence here is not proof they did not happen.",
+  "The results do not show whether T3-02 and T3-03 correspond exactly to the rabbitmq and redis-cache calls; the order matches but the call_ids do not say so.",
+  "Changes to the deploy's source and url fields are null, so the commit or diff for aa-sync-00633 could not be examined.",
+  "The dead-letter exchange and routing configuration for portfolio-updates was not retrieved. The dead-letter path is therefore unmapped.",
+  "No dependency data was retrieved for aa-sync, broker-gateway, market-data, msg-delivery, redis-cache, postgres or rabbitmq, so the downstream path from portfolio-updates to msg-delivery and outbound-msgs is unmapped.",
+  "Queue links for inbound-msgs and outbound-msgs were not retrieved.",
+  "The change query covered all four kinds but returned only deploys. This may mean there were no config, migration or flag changes, or that those sources are not captured. It is not proof of no change.",
+  "Dependency weights were returned for only portfolio-svc and portfolio-consumer. Their effect on consumer throughput is unknown.",
+  "Search results show no source or URL, so the postmortem text, timeline and the share of affected users in each past incident could not be checked.",
+  "No past incident matched rabbitmq, consumer, or schema-mismatch symptoms. The searches may have missed relevant incidents because of query wording; only four queries were run, and none was retried with different terms.",
+  "Nothing in this investigation confirms or rules out a Redis or cache problem in the current window. Redis state must come from observability or the changes/dependency results.",
+  "The DLX/routing configuration for portfolio-updates was not returned by get_dependencies, and I have no tool that reads queue or exchange config, so dead-letter routing remains unverified.",
+  "The aa-sync-00633 diff and commit message are unavailable (source and url are null), so I cannot confirm that it changes the 'positions' or 'holdings' field.",
+  "The graph does not show which payload fields aa-sync puts on the queue versus returns in its synchronous response, so the field-level link is still open.",
+  "The dependency data is a topology snapshot and does not show call or message volumes, so I cannot tell whether aa-sync's publishes account for the roughly half of users affected.",
+  "No dead-lettered message was sampled, so no payload, app-id, producer, schema-version or x-death header was verified. The producer of the 'positions' field remains unknown.",
+  "The 90-match portfolio-consumer ERROR set was not fully paged. Only 11:20-11:21 (6 matches) was covered, and 11:21-12:20 is still open.",
+  "aa-sync and portfolio-svc logs in 11:15-11:25 show no publish events or payload-version fields. Either these services do not log payloads or the 'holdings'/'positions' terms were not logged, so the logs cannot identify the producer.",
+  "The tool budget (5 calls) was reached, so no further header, sample or x-death queries were run.",
+  "Clock skew between rabbitmq and portfolio-consumer was not verified, so the 4-second ordering between the DLQ counter and the first consumer error is not decisive.",
+  "Per-instance and per-tenant/message-source breakdown of portfolio-consumer err_rate and rps was not returned: metric queries gave summaries only, with no points, tags or labels.",
+  "Per-timestamp err_rate and rps for portfolio-consumer were not returned, so the onset ordering comes only from earlier established claims.",
+  "aa-sync instance and deploy-version breakdown around 11:19 was not available: the 'version' log filter returned 0 lines and the metric queries did not include aa-sync.",
+  "rabbitmq unacked counts and consumer ack rate after 11:49 were not returned: the metric list for rabbitmq has only err_rate, latency_ms, memory_pct and rps, and no per-queue or unacked/ack metric.",
+  "No max-length or overflow policy configuration was found. The 'policy' log search returned nothing, and config state was not queried, so the absence is unverified.",
+  "The tool-call budget was exceeded (6 calls against about 5), so the remaining breakdowns were not attempted.",
+  "The query tools only search log text. They returned no dead-lettered payload bodies and no message headers, so payload shape and origin headers (including x-death) are unverified. The rabbitmq 'dead' search (T9-04) returned only the two counter WARN lines.",
+  "Accepted messages were not sampled. No successful-processing logs were queried, so whether 'holdings' is still accepted is unknown.",
+  "T9-02 was truncated (18 of 30 matches shown), so the full extent of the error sample is not confirmed.",
+  "The portfolio-svc 'positions' search and the aa-sync 'v2' search returned no matches. Absence in logs is not evidence that the producer did not emit the field, and the search terms may not match the actual log format.",
+  "The producer of the 'positions' messages is unidentified. portfolio-svc and aa-sync were not confirmed as the source.",
+  "No metrics were queried for this task, so payload or message-size shifts were not checked.",
+  "My tools (get_changes, get_dependencies, search_incidents) cannot retrieve a commit, diff, or changed-file list, so the holdings-to-positions rename is unverified.",
+  "The change record has no source or URL, so I could not locate the diff elsewhere.",
+  "No per-account or per-user scope data was returned, so whether aa-sync-00633 affects only some accounts is unverified.",
+  "I did not run search_incidents for this task, since past incidents would not show the content of this change.",
+  "The 11:49-12:20 WARN/ERROR query was truncated at 200 of 222 matches (T11-03), so ERROR lines from about 12:17 to 12:20 are unverified.",
+  "No targeted searches were run for timeout, nack, requeue or connection terms in portfolio-consumer. Their absence rests only on the lines returned, which are complete for 11:21-11:49 and only partial after 11:49.",
+  "Redelivery counts come from portfolio-consumer log statements, not broker counters, so they cannot confirm unacked or requeued messages.",
+  "The 'positions' producer is still unidentified. Portfolio-svc logs were not checked for this window, and the rejected payload was not sampled.",
+  "The pulls cover only 11:17:00-11:20:10. Any rejection before 11:17 was not checked.",
+  "rabbitmq returned only 5 lines and portfolio-consumer only 4, so their absence of earlier errors is limited evidence and not proof of health.",
+  "The aa-sync publish lines carry no payload, version or instance field, so they cannot show whether 'positions' came from aa-sync-00633 or whether only some accounts are affected.",
+  "Clock skew between rabbitmq, portfolio-consumer and aa-sync was not measured, so the ordering of the 4-second gap is unverified.",
+  "Publish counts come from a text filter on log lines and were not cross-checked against any publish metric or queue ingress rate for portfolio-updates.",
+  "The 'positions' ERROR lines have no consent, account or message id, so rejected messages cannot be matched to any consent or fetch.",
+  "The aa-sync fetch and publish lines have consent ids but no account, record count, payload version or message id. Publish lines cannot be tied to a consent, so the fetch-to-publish link is missing.",
+  "The 'processed portfolio update' ids do not share a namespace with the aa-sync consent ids, so accepted and rejected messages cannot be compared per consent.",
+  "Consumer processed-line counts (13 after onset in this sample) do not reconcile with the 0.60 error rate, and the logs may be sampled. Share-of-users (about 50%) cannot be derived from these lines.",
+  "No consumer or aa-sync log after 11:30 was checked for this task, so whether the consent-level split holds through 12:20 is unverified.",
+  "The 'positions' ERROR window ends at 11:29:39 because the query was capped at 11:30. The rejected-message pattern after 11:30 is therefore not covered by these results.",
+  "No repository, git, or diff tool is available to the dependency agent, so the content of aa-sync-00633 cannot be read. Whether it renames 'holdings' to 'positions' is untested.",
+  "The aa-sync-00633 change record has source and url set to null (E-050, E-080), so there is no commit link to follow.",
+  "No account, flag or canary configuration was returned for aa-sync (E-036, E-081). Whether the change is gated by account, feature flag or canary percentage, which would explain roughly 50% of users, cannot be checked from these tools.",
+  "To close these gaps, someone with repository access should review the aa-sync-00633 diff for the holdings-to-positions rename and any conditional logic keyed on account, flag or percentage. Samples of dead-lettered messages should be compared by account ID to test the roughly 50% split.",
+  "No log line carries app-id, producer, schema-version or x-death headers. The rabbitmq logs only report counts, so the header-level sample could not be built.",
+  "aa-sync logs have no instance or version identifier, so the aa-sync-00633 link to 'positions' cannot be checked from logs.",
+  "The accepted-message DEBUG search for 'accepted' returned nothing. That is not proof that accepted messages lack 'holdings'; the wording may not match the log lines, or DEBUG may not be logged.",
+  "T15-01 was truncated (50 of 60 matches). Later rejections after 11:28 were not sampled.",
+  "Count discrepancy: E-054 reports 6 matching errors in 11:20–11:21. In T15-01 there are 12 between 11:20:04 and 11:21:59, so E-054 may have counted only 11:20. E-004 gives 90 total matches, while T15-01 reports total 60 for a different filter (INFO, 11:15–11:30).",
+  "Five-call budget is used up, so no further query was run to test the header or accepted-message questions."
+ ],
+ "actions": [
+  {
+   "text": "Roll back aa-sync-00633, or ship a fix so aa-sync publishes 'holdings' again. Confirm that consumer err_rate falls back toward baseline after the rollback.",
+   "rationale": "It is the only change near onset and aa-sync is the sole publisher to the failing queue. The causal link is still inferred, so verify the effect after rollback.",
+   "evidence_ids": [
+    "E-049",
+    "E-046",
+    "E-053"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Watch ready depth on portfolio-updates and the consumer error rate directly, not the dead-letter total. Preserve or inspect the rejected and backlogged messages before purging or reprocessing, so no portfolio updates are lost.",
+   "rationale": "The DLQ counter froze at 2500 at 11:49 while the backlog and rejections continued, so DLQ size understates impact.",
+   "evidence_ids": [
+    "E-061",
+    "E-062",
+    "E-089",
+    "E-090"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Have someone with repository access review the aa-sync-00633 diff for a holdings-to-positions rename and any gating by account, flag or percentage.",
+   "rationale": "The change record has no source or URL, so the causal link and the roughly 50% split are unverified.",
+   "evidence_ids": [
+    "E-050",
+    "E-080",
+    "E-086"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Sample dead-lettered and accepted messages, including payload fields, app-id and x-death headers. Compare by account to test the 50% split and identify the producer.",
+   "rationale": "No payload, header or producer data was captured, so the source of 'positions' is unconfirmed.",
+   "evidence_ids": [
+    "E-019",
+    "E-124",
+    "E-130"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Inspect the broker for the dead-letter exchange and queue configuration, max-length policies, unacked counts and consumer ack rates on portfolio-updates. Check clock skew between hosts.",
+   "rationale": "This would explain why the dead-letter total froze at 2500 while the backlog grows.",
+   "evidence_ids": [
+    "E-060",
+    "E-069",
+    "E-068",
+    "E-056"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add schema or contract validation for the portfolio-updates payload at publish time, and consider a versioned schema field plus a canary rollout for producer payload changes.",
+   "rationale": "A producer change dead-lettered messages at the consumer with no pre-release or log-level signal.",
+   "evidence_ids": [
+    "E-053",
+    "E-057",
+    "E-124"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 60,
+  "tool_attempts": 60,
+  "llm_calls": 48,
+  "tokens_in": 496414,
+  "tokens_out": 91672,
+  "rounds": 3,
+  "elapsed_s": 421.8
+ },
+ "dropped_claims": 0
+}

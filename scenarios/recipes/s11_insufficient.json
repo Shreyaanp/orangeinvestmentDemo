@@ -1,0 +1,38 @@
+{
+  "id": "s11_insufficient",
+  "seed": 11,
+  "start": "2026-03-26T12:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Portfolio pages are noticeably slower than usual since about 13:00. No errors reported by users.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "portfolio-svc", "cause_type": "thread_pool_starvation", "description": "portfolio-svc ran out of request threads (thread pool saturation), slowing requests. Evidence for this is deliberately missing from the data."},
+      "effects": [{"target": "portfolio-svc", "metric": "latency_ms", "op": "mul", "value": 3, "ramp_min": 4}],
+      "logs": [{"service": "portfolio-svc", "level": "WARN", "msg": "request thread pool saturated: 200/200 busy, queueing requests", "per_min": 3}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 58,
+      "effects": [
+        {"target": "redis-cache", "metric": "hit_ratio", "op": "set", "value": 0.88, "ramp_min": 5},
+        {"target": "redis-cache", "metric": "latency_ms", "op": "mul", "value": 2, "ramp_min": 5}
+      ],
+      "logs": [{"service": "redis-cache", "level": "WARN", "msg": "hit ratio below threshold: {hit_ratio}", "per_min": 1}]
+    },
+    {
+      "id": "D2", "role": "distractor", "at_min": 57,
+      "changes": [{"kind": "deploy", "service": "portfolio-svc", "ref": "portfolio-svc-00712", "note": "minor copy change"}]
+    },
+    {
+      "id": "D3", "role": "distractor", "at_min": 58,
+      "effects": [{"target": "postgres", "metric": "latency_ms", "op": "mul", "value": 1.5, "ramp_min": 5}],
+      "logs": [{"service": "postgres", "level": "WARN", "msg": "slow query: holdings lookup took {latency_ms}ms", "per_min": 1}]
+    }
+  ],
+  "artifacts": [{"kind": "log_drop", "service": "portfolio-svc", "from_min": 55, "keep_frac": 0.0}],
+  "tool_faults": [{"tool": "query_logs", "kind": "partial", "on_calls": [1], "max_results": 20}],
+  "answerable": false,
+  "expected_status": "INCONCLUSIVE",
+  "trap": "portfolio-svc logs are missing for the window; a deploy, a cache dip and a mild DB slowdown are all plausible"
+}

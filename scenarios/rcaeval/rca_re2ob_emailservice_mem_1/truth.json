@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "emailservice",
+      "cause_type": "memory_exhaustion",
+      "description": "memory stress injected into emailservice (RE2-OB).",
+      "onset": "2024-01-17T07:11:45Z",
+      "decisive": [
+        {
+          "kind": "metric",
+          "service": "emailservice",
+          "level": null,
+          "contains": "",
+          "metric": "mem",
+          "min_value": 52238991.36,
+          "start": "2024-01-17T07:11:45Z",
+          "end": "2024-01-17T07:24:45Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "real telemetry (RE2-OB, memory stress); no change events, no past incidents, per-second data averaged per minute"
+}

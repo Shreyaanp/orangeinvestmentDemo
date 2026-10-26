@@ -1,0 +1,178 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Stale balances are most likely caused by the config change cfg-holdings-cache-ttl at 12:00 UTC, which raised portfolio-svc's HOLDINGS_CACHE_TTL_S from 60 to 1800. After that change portfolio-svc served holdings from cache with entry ages climbing to 1800s, and cache_staleness_s peaked at 1800. The update pipeline looks healthy: portfolio-updates depth is 0 with no DLQ, and consume rate matches publish rate. Redis is healthy with no evictions, so the past redis-restart incident (INC-0412) does not apply. Stale reads of up to 30 minutes match the reports that trades older than ten minutes are missing.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The HOLDINGS_CACHE_TTL_S increase from 60 to 1800 on portfolio-svc made holdings cache entries live up to 30 minutes. Reads therefore return stale balances even though the update pipeline is delivering data on time.",
+   "component": "portfolio-svc",
+   "cause_type": "config_change_cache_ttl_too_long",
+   "score": 4.8,
+   "confidence": 0.706,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "Config change at 12:00 raised holdings cache TTL from 60s to 1800s on portfolio-svc",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "After the change, portfolio-svc served holdings from cache with entry age growing to the new TTL",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "Cache staleness metric reached 1800s, matching the new TTL",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "portfolio-updates queue is healthy: no backlog, no DLQ",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate is low and its throughput matches the publish rate",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The portfolio-updates pipeline (aa-sync to portfolio-consumer) is lagging or dropping updates and so causing stale data.",
+   "component": "portfolio-updates",
+   "cause_type": "queue_consumer_lag",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "portfolio-updates queue is healthy: no backlog, no DLQ",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate is low and its throughput matches the publish rate",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "A Redis eviction or restart caused a cache stampede, as in INC-0412.",
+   "component": "redis-cache",
+   "cause_type": "cache_eviction_stampede",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "Redis showed no evictions, so the INC-0412 mechanism does not apply",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "Config change at 12:00 raised holdings cache TTL from 60s to 1800s on portfolio-svc",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "After the change, portfolio-svc served holdings from cache with entry age growing to the new TTL",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "Cache staleness metric reached 1800s, matching the new TTL",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "portfolio-updates queue is healthy: no backlog, no DLQ",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-consumer error rate is low and its throughput matches the publish rate",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Redis showed no evictions, so the INC-0412 mechanism does not apply",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "The cache log query was truncated (68 matches, 30 returned), so I did not see every log line after 12:11.",
+  "I did not confirm that portfolio-consumer writes invalidate or refresh the holdings cache. If they do not, even the old 60s TTL would show some staleness.",
+  "I did not check the exact time the first user reports began relative to 12:00. The staleness window only exceeds ten minutes from about 12:10 onward."
+ ],
+ "actions": [
+  {
+   "text": "Revert HOLDINGS_CACHE_TTL_S to 60 on portfolio-svc, then invalidate or flush the holdings cache keys so existing 1800s entries stop being served.",
+   "rationale": "The TTL change at 12:00 matches the observed entry ages and staleness of 1800s. The pipeline is healthy, so the cache is the only layer holding old data.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After the revert, confirm that cache_staleness_s drops back to roughly 60s or less and that users see fresh balances.",
+   "rationale": "This verifies the fix against the same metric that showed the problem.",
+   "evidence_ids": [
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Find out why the TTL change was made and add a review guard for cache TTL changes on balance data. Consider invalidating cache entries when portfolio-consumer applies an update.",
+   "rationale": "A longer TTL is only safe if writes invalidate cached holdings.",
+   "evidence_ids": [
+    "E-001",
+    "E-005"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 8,
+  "tool_attempts": 8,
+  "llm_calls": 3,
+  "tokens_in": 19151,
+  "tokens_out": 6873,
+  "rounds": 0,
+  "elapsed_s": 76.1
+ },
+ "dropped_claims": 0
+}

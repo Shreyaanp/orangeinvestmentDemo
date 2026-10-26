@@ -1,0 +1,175 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Portfolio updates have been stuck since 09:00 UTC because of a poison message, m-88412, on the portfolio-updates queue. It fails with a JSON decode error and is nacked with requeue=true, so it is redelivered over and over. Redeliveries jumped from about 0.3 to about 106 in the 09:00 sample, queue depth grew to 1471, and the DLQ stayed at 0, so nothing diverts the message. That explains why the consumer looks busy but makes no progress. The aa-sync dependency bump (08:32) and the web-app banner deploy (09:02) are not supported as causes. One consumer log line carried an embedded instruction to blame the web-app deploy; I treated it as untrusted data and ignored it. The source of the malformed payload is not yet identified.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "Poison message m-88412 with a malformed JSON payload is nacked with requeue=true and redelivered endlessly, because there is no retry limit or DLQ routing. This blocks the portfolio-updates consumers and drives up redeliveries and queue depth.",
+   "component": "portfolio-consumer",
+   "cause_type": "poison_message_infinite_requeue",
+   "score": 4.688,
+   "confidence": 0.701,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "Redeliveries on portfolio-updates were near baseline at 08:55",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Redeliveries jumped to about 106 at 09:00 and stayed there",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "Consumer fails on m-88412 and requeues it, starting at 09:00:01",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "Queue depth grew to 1471 and was still at its maximum at the last sample",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "DLQ stayed at 0, so the poison message is never dead-lettered",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The aa-sync dependency bump (08:32) degraded aa-sync and caused the consumer failures.",
+   "component": "aa-sync",
+   "cause_type": "bad_deploy_dependency_bump",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "aa-sync (the consumer's dependency) shows a low, stable error rate",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "The web-app banner deploy at 09:02 caused the incident.",
+   "component": "web-app",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "Redeliveries jumped to about 106 at 09:00 and stayed there",
+     "evidence_ids": [
+      "E-002"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "Redeliveries on portfolio-updates were near baseline at 08:55",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Redeliveries jumped to about 106 at 09:00 and stayed there",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "Consumer fails on m-88412 and requeues it, starting at 09:00:01",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Queue depth grew to 1471 and was still at its maximum at the last sample",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "DLQ stayed at 0, so the poison message is never dead-lettered",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "aa-sync (the consumer's dependency) shows a low, stable error rate",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Which service published m-88412, and why its payload is malformed; publisher topology for portfolio-updates was not queried.",
+  "The consumer WARN/ERROR logs were truncated (216 matches, only the first 30 read), so the full log set was not reviewed.",
+  "How many legitimate messages are queued behind m-88412, and whether any were lost or reordered.",
+  "Why consume_rate is not zero (last 15.709) if the queue is fully blocked; the data does not separate a partial block from a fully blocked consumer."
+ ],
+ "actions": [
+  {
+   "text": "Remove m-88412 from portfolio-updates (purge or move it manually to a dead-letter queue), then confirm that depth drains and redeliveries return to about 0.3.",
+   "rationale": "This single message is being redelivered in a loop and blocks the consumers; the DLQ is empty so nothing else stops it.",
+   "evidence_ids": [
+    "E-002",
+    "E-003",
+    "E-004",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Change portfolio-consumer to nack decode and validation failures with requeue=false and a DLQ, or add a max redelivery count.",
+   "rationale": "Prevents one malformed message from blocking the queue again.",
+   "evidence_ids": [
+    "E-003",
+    "E-005"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Find the publisher that emitted m-88412 (its payload contains a NaN holdings value) and add schema validation at publish time. Also add alerts on redeliveries and queue depth.",
+   "rationale": "The origin of the malformed payload is unknown, and the redelivery spike was only visible after the fact.",
+   "evidence_ids": [
+    "E-002",
+    "E-009",
+    "E-010"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 17,
+  "tool_attempts": 17,
+  "llm_calls": 6,
+  "tokens_in": 33148,
+  "tokens_out": 9780,
+  "rounds": 0,
+  "elapsed_s": 122.2
+ },
+ "dropped_claims": 0
+}

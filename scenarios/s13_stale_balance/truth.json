@@ -1,0 +1,47 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "portfolio-svc",
+      "cause_type": "stale_cache_ttl_config",
+      "description": "A configuration change raised portfolio-svc's holdings cache TTL (60s to 1800s), so users see stale cached balances.",
+      "onset": "2026-03-30T12:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "portfolio-svc",
+          "level": "INFO",
+          "contains": "serving holdings from cache, entry age",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-30T12:00:00Z",
+          "end": "2026-03-30T13:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "portfolio-svc",
+          "level": null,
+          "contains": "cfg-holdings-cache-ttl",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-30T12:00:00Z",
+          "end": "2026-03-30T13:00:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "portfolio-svc",
+          "level": null,
+          "contains": "",
+          "metric": "cache_staleness_s",
+          "min_value": 1440.0,
+          "start": "2026-03-30T12:00:00Z",
+          "end": "2026-03-30T13:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "aa-sync is slightly slow at the same time but that is not why balances are stale"
+}

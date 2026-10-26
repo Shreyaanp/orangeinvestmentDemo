@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/src/scripts/hooks.py\" protect" }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/src/scripts/hooks.py\" commit-gate" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/src/scripts/hooks.py\" format" }]
+      }
+    ]
+  }
+}

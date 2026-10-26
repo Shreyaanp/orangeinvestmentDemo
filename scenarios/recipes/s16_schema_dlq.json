@@ -1,0 +1,28 @@
+{
+  "id": "s16_schema_dlq",
+  "seed": 16,
+  "start": "2026-04-02T10:20:00Z",
+  "minutes": 120,
+  "incident_at_min": 90,
+  "incident_text": "Portfolio updates are not arriving for about half of users since 11:20. Ops sees the dead-letter queue growing.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "aa-sync", "cause_type": "message_schema_change", "description": "An aa-sync release changed the message schema (a renamed field), so portfolio-consumer validation fails and messages pile up in the dead-letter queue."},
+      "effects": [
+        {"target": "portfolio-consumer", "metric": "err_rate", "op": "add", "value": 0.6, "ramp_min": 2},
+        {"target": "portfolio-updates", "metric": "dlq", "op": "set", "value": 2500, "ramp_min": 30}
+      ],
+      "logs": [
+        {"service": "portfolio-consumer", "level": "ERROR", "msg": "schema validation failed: unexpected field 'positions' (expected 'holdings')", "per_min": 6},
+        {"service": "rabbitmq", "level": "WARN", "msg": "dead-lettered messages on portfolio-updates: {dlq} total", "per_min": 1, "series": "portfolio-updates", "decisive": false}
+      ],
+      "changes": [{"kind": "deploy", "service": "aa-sync", "ref": "aa-sync-00633", "note": "normalize holdings payload v2", "offset_min": -1}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 30,
+      "changes": [{"kind": "deploy", "service": "portfolio-consumer", "ref": "portfolio-consumer-00091", "note": "log level tweak"}]
+    }
+  ],
+  "trap": "errors appear in the consumer, but the deploy that changed the schema was on the producer"
+}

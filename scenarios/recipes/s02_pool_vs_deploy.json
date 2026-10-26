@@ -1,0 +1,28 @@
+{
+  "id": "s02_pool_vs_deploy",
+  "seed": 2,
+  "start": "2026-03-14T12:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Users report that portfolio balances look stale or fail to refresh since about 12:55. Sync errors are spiking.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 50,
+      "truth": {"component": "aa-sync", "cause_type": "db_pool_exhaustion", "description": "aa-sync exhausted its database connection pool (pool full, requests queued), making account-aggregator sync slow and error-prone and leaving portfolio data stale."},
+      "effects": [
+        {"target": "aa-sync", "metric": "latency_ms", "op": "mul", "value": 8, "ramp_min": 8},
+        {"target": "aa-sync", "metric": "err_rate", "op": "add", "value": 0.35, "ramp_min": 8},
+        {"target": "aa-sync", "metric": "pool_in_use", "op": "set", "value": 100, "ramp_min": 6}
+      ],
+      "logs": [
+        {"service": "aa-sync", "level": "ERROR", "msg": "connection pool exhausted: {pool_in_use}/{pool_max} connections in use, requests queued", "per_min": 5, "after_min": 6},
+        {"service": "aa-sync", "level": "WARN", "msg": "slow query on holdings_snapshot took {latency_ms}ms", "per_min": 2}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 60,
+      "changes": [{"kind": "deploy", "service": "web-app", "ref": "web-app-00231", "note": "UI copy change on holdings page"}]
+    }
+  ],
+  "trap": "unrelated UI deploy 10 minutes after the real onset"
+}

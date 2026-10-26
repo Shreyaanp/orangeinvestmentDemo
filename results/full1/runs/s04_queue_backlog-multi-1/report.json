@@ -1,0 +1,585 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most probable root cause is CPU throttling of aa-sync starting around 09:55, which pushed its latency from about 90 ms to about 550 ms. portfolio-consumer calls aa-sync synchronously, so it began timing out from about 09:57. The portfolio-updates queue's consume_rate fell from about 49 to about 15 while publishing stayed near 40, and the backlog grew from 137 messages at 10:02 to 1573 by 10:59, which delays notifications. Request rate did not rise, so the throttling is likely from a reduced or mis-set CPU quota, or from a CPU consumer unrelated to request volume. This is unconfirmed because no quota or config data was retrieved. A separate, earlier receipt-delay signal in msg-delivery (from 09:02) is probably an independent issue that cannot be tied to portfolio-update notifications. Rate units and consumer rps do not reconcile with the observed backlog growth, so the exact mechanism has gaps.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync is CPU-throttled from about 09:55 (flat 85% ceiling), likely from a reduced or mis-set CPU quota or limit, so its latency rises from about 90 ms to about 550 ms. portfolio-consumer's synchronous calls to it then slow and time out, queue consumption drops from about 49 to about 15 while publishing stays near 40, and portfolio-updates backs up from about 10:02, delaying notifications.",
+   "component": "aa-sync",
+   "cause_type": "cpu_quota_throttling_slow_upstream",
+   "score": 2.15,
+   "confidence": 0.518,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "aa-sync CPU throttle was at baseline (about 3%) until 09:54, first rose at 09:55, and reached a flat 85% by 09:59, where it stayed through the end of the window. aa-sync logs still reported 85% throttling at the end of the window.",
+     "evidence_ids": [
+      "E-093",
+      "E-094",
+      "E-130",
+      "E-135"
+     ]
+    },
+    {
+     "text": "aa-sync latency rose from a baseline of about 86-92 ms at the same time (first rise at 09:55) and stayed at about 520-580 ms.",
+     "evidence_ids": [
+      "E-096",
+      "E-097"
+     ]
+    },
+    {
+     "text": "portfolio-consumer calls aa-sync synchronously (weight 0.8), so an aa-sync slowdown propagates to it. Its latency rose from about 150 ms to about 285 ms at 09:55 and to about 510 ms by 10:00, and its aa-sync timeouts begin around 09:57.",
+     "evidence_ids": [
+      "E-049",
+      "E-108",
+      "E-010"
+     ]
+    },
+    {
+     "text": "The portfolio-updates queue's consume_rate dropped from about 49 to about 30 at the 09:55 point, while publish_rate stayed near 40. aa-sync publishes to this queue and portfolio-consumer consumes from it. The backlog warning first appeared at 10:02:53.",
+     "evidence_ids": [
+      "E-115",
+      "E-151",
+      "E-044",
+      "E-001"
+     ]
+    },
+    {
+     "text": "aa-sync request rate did not rise before or during the throttle onset (it fell slightly), which points to a quota or limit problem, or per-request cost, rather than extra load. This is an inference.",
+     "evidence_ids": [
+      "E-128",
+      "E-158",
+      "E-162"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "portfolio-consumer rps stayed flat at about 40 after 10:00, which disagrees with a drop in queue consume_rate. Either the metrics measure different things or the mechanism is not fully understood.",
+     "evidence_ids": [
+      "E-106",
+      "E-107",
+      "E-127"
+     ]
+    },
+    {
+     "text": "The rate summaries (publish about 40 vs consume about 15) imply far faster backlog growth than the observed roughly 25 messages per minute. Units or metrics may be inconsistent, and this is an unverified assumption.",
+     "evidence_ids": [
+      "E-126",
+      "E-113"
+     ]
+    },
+    {
+     "text": "The flat 85.0 for about an hour may be a cap or a stuck reading rather than a true measurement. No configured CPU quota or change was found, and the change feed may be incomplete.",
+     "evidence_ids": [
+      "E-101",
+      "E-047",
+      "E-139"
+     ]
+    },
+    {
+     "text": "No restart, config or flag line appeared in aa-sync logs before onset, so the trigger is not identified.",
+     "evidence_ids": [
+      "E-134"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A separate fault on the msg-delivery or WhatsApp provider side, such as slow delivery receipts, delayed some notifications from about 09:02. This began 52 minutes before any aa-sync symptom and is independent of the portfolio-updates backlog. It could account for part of the late notifications that H1 and H3 do not explain.",
+   "component": "msg-delivery",
+   "cause_type": "downstream_provider_receipt_delay",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "msg-delivery logged delivery-receipt-delayed warnings starting at 09:02:32 and continuing to 10:58:09 (18 in total, complete). This is well before any aa-sync symptom.",
+     "evidence_ids": [
+      "E-012",
+      "E-087",
+      "E-013"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "msg-delivery latency and rps were flat, the outbound-msgs queue stayed empty with 4 consumers, and there were no restarts and a low error rate. This shows no sign of a processing problem on the delivery side.",
+     "evidence_ids": [
+      "E-082",
+      "E-083",
+      "E-085",
+      "E-086",
+      "E-017"
+     ]
+    },
+    {
+     "text": "The 18 warnings carry only message IDs, with no type, template or 429 text. They cannot be linked to portfolio-update notifications, and rate limiting is not evident (based on absence of lines, not a targeted search).",
+     "evidence_ids": [
+      "E-088",
+      "E-091",
+      "E-021"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "aa-sync's per-request CPU cost rose at about 09:55 because of an in-process CPU consumer that does not scale with request count, such as a background job, a heavier payload or consent mix, or a runaway loop. Throttling and latency climbed with no rise in rps, and the same downstream chain follows: consumer timeouts, a drop in queue consume_rate, and a growing portfolio-updates backlog.",
+   "component": "aa-sync",
+   "cause_type": "internal_cpu_consumption_growth",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Throttling rose from 3% to 85% while aa-sync rps stayed flat or fell, so a CPU consumer that does not scale with request count is plausible. The same downstream chain would follow.",
+     "evidence_ids": [
+      "E-128",
+      "E-158",
+      "E-157",
+      "E-159"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The flat 85% ceiling looks more like a quota cap than load-driven consumption. This is an assumption.",
+     "evidence_ids": [
+      "E-139"
+     ]
+    },
+    {
+     "text": "The ramp stops abruptly at 85.0 and stays flat for roughly an hour, and no consent-refresh burst or other in-process trigger was seen near the onset.",
+     "evidence_ids": [
+      "E-094",
+      "E-160"
+     ]
+    },
+    {
+     "text": "No restart, config or flag line appeared in aa-sync logs before onset.",
+     "evidence_ids": [
+      "E-134"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "First WARN for portfolio-updates backlog: 137 messages ready with 3 consumers, the earliest deviation in the logs.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "portfolio-consumer's earliest aa-sync upstream timeout in the window",
+   "evidence_ids": [
+    "E-010"
+   ]
+  },
+  {
+   "text": "Earliest 'delivery receipt delayed' warning in msg-delivery, about 55 minutes before the first aa-sync timeout",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "msg-delivery receipt-delay warnings continue to the end of the query, 18 in total, with the result not truncated",
+   "evidence_ids": [
+    "E-013"
+   ]
+  },
+  {
+   "text": "msg-delivery has no restarts in the window and a low error rate (max 0.006)",
+   "evidence_ids": [
+    "E-017"
+   ]
+  },
+  {
+   "text": "aa-sync publishes to the portfolio-updates queue, and portfolio-consumer consumes from it.",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "portfolio-consumer makes a synchronous call to aa-sync with weight 0.8, so an aa-sync slowdown would propagate back to portfolio-consumer.",
+   "evidence_ids": [
+    "E-049"
+   ]
+  },
+  {
+   "text": "msg-delivery latency_ms was flat across the window, with a mean of 250.495 ms and a max of 266.294 ms.",
+   "evidence_ids": [
+    "E-082"
+   ]
+  },
+  {
+   "text": "msg-delivery latency points show no rise at 09:02, the first receipt-delay warning, or at any later time up to 10:55.",
+   "evidence_ids": [
+    "E-083"
+   ]
+  },
+  {
+   "text": "outbound-msgs queue depth stayed at zero for the whole window, so there was no backlog on the queue that msg-delivery consumes.",
+   "evidence_ids": [
+    "E-085"
+   ]
+  },
+  {
+   "text": "outbound-msgs had 4 consumers throughout the window, and its dlq stayed at zero.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "The first msg-delivery receipt-delay WARN was at 09:02:32, and the last was at 10:58:09. The result is complete (18 total, not truncated).",
+   "evidence_ids": [
+    "E-087"
+   ]
+  },
+  {
+   "text": "All 18 msg-delivery WARN lines contain the same receipt-delay text and no notification type, template, 429 or throttle text.",
+   "evidence_ids": [
+    "E-088"
+   ]
+  },
+  {
+   "text": "aa-sync cpu_throttle_pct first rose at 09:55, the first point above baseline.",
+   "evidence_ids": [
+    "E-093"
+   ]
+  },
+  {
+   "text": "aa-sync cpu_throttle_pct reached its 85.0 ceiling at 09:59 and stayed flat at 85.0 through 10:59, the end of the window.",
+   "evidence_ids": [
+    "E-094"
+   ]
+  },
+  {
+   "text": "aa-sync latency_ms was at baseline (about 86 to 92 ms) before onset and first rose at 09:55.",
+   "evidence_ids": [
+    "E-096"
+   ]
+  },
+  {
+   "text": "aa-sync latency_ms climbed through 09:59 and stayed elevated at about 520 to 580 ms through 10:59. Values at 09:59 and 10:02 were 555.488 and 571.024.",
+   "evidence_ids": [
+    "E-097"
+   ]
+  },
+  {
+   "text": "portfolio-consumer rps held flat across the 10:00 boundary, at 40.327 before 10:00 and 40.203 at 10:00.",
+   "evidence_ids": [
+    "E-106"
+   ]
+  },
+  {
+   "text": "portfolio-consumer rps was still about 40 at the end of the window (10:55 value 40.12), so consumption did not fall after 10:00.",
+   "evidence_ids": [
+    "E-107"
+   ]
+  },
+  {
+   "text": "portfolio-consumer latency_ms was about 150 ms before 09:55, then rose to 285.453 at 09:55 and to 510.942 at 10:00, which is the earliest deviation in the metric.",
+   "evidence_ids": [
+    "E-108"
+   ]
+  },
+  {
+   "text": "portfolio-updates consume_rate was still about 49 msg/s at 09:50 and dropped to 29.852 at the 09:55 point, the first downward step in the queue's consume_rate.",
+   "evidence_ids": [
+    "E-115"
+   ]
+  },
+  {
+   "text": "aa-sync rps was flat before onset: the highest pre-onset point was 36.759 at 09:41, and the 09:54 point was 36.566, so request rate did not rise before the throttle onset.",
+   "evidence_ids": [
+    "E-128"
+   ]
+  },
+  {
+   "text": "aa-sync cpu_throttle_pct was at baseline at 09:54 and first rose at 09:55, to 19.395.",
+   "evidence_ids": [
+    "E-130"
+   ]
+  },
+  {
+   "text": "aa-sync logs from 09:45 to 10:00 show no restart, config or flag line before onset. The only consent-related WARN lines were 'refresh scheduled' entries, and the result was complete (total 36, not truncated).",
+   "evidence_ids": [
+    "E-134"
+   ]
+  },
+  {
+   "text": "aa-sync logs for 10:50-11:00 still report 85% CPU throttling, matching the flat metric plateau. The result is complete (total 32, not truncated).",
+   "evidence_ids": [
+    "E-135"
+   ]
+  },
+  {
+   "text": "portfolio-updates publish_rate was not elevated at the consume drop: it was about 40 at 09:50, 09:55 and 10:00.",
+   "evidence_ids": [
+    "E-151"
+   ]
+  },
+  {
+   "text": "aa-sync rps at 09:54 (the throttle onset minute) was 36.566, within the baseline band, not a spike.",
+   "evidence_ids": [
+    "E-157"
+   ]
+  },
+  {
+   "text": "aa-sync rps at 09:56 was 34.124 and at 09:57 was 33.771, lower than the 09:45 starting value of 36.195, so request rate fell while throttling climbed to 85.",
+   "evidence_ids": [
+    "E-158"
+   ]
+  },
+  {
+   "text": "aa-sync cpu_throttle_pct over 09:45-10:00 reached 85.0 with a min of 2.952, while the rps stats in the same query stayed in a narrow band.",
+   "evidence_ids": [
+    "E-159"
+   ]
+  },
+  {
+   "text": "Consent-refresh log volume 09:45-09:57 was low: only 2 'refresh scheduled' WARN lines and no burst near 09:54.",
+   "evidence_ids": [
+    "E-160"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "msg-delivery shows no 429 or WhatsApp template/session errors in its WARN+ results, so rate limiting is not evident in the logs. This rests on the absence of matching lines, not on a targeted search.",
+   "evidence_ids": [
+    "E-021"
+   ]
+  },
+  {
+   "text": "No config, migration or flag change was recorded for portfolio-svc, portfolio-consumer, msg-delivery, aa-sync or rabbitmq in the window, so the 'no change' finding for those components rests on the change feed being complete.",
+   "evidence_ids": [
+    "E-047"
+   ]
+  },
+  {
+   "text": "The 18 delayed-receipt IDs are probably not portfolio-update notifications, but the logs do not show message type, so this is unconfirmed.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  },
+  {
+   "text": "The flat 85.0 from 09:59 to 10:59 may be a hard cap or a saturated or stuck reading rather than a true measurement. Its meaning cannot be confirmed from these points alone.",
+   "evidence_ids": [
+    "E-101"
+   ]
+  },
+  {
+   "text": "If the summary means hold, publish (40) exceeding consume (31) would add about 540 messages per minute, far more than the roughly 25 per minute implied by the 137 to 1573 backlog in E-001 and E-002. The rate summaries and depth growth cannot both be right unless the rates vary a lot over time.",
+   "evidence_ids": [
+    "E-113"
+   ]
+  },
+  {
+   "text": "The rate units look inconsistent. Taking consume_rate near 14.6 and publish_rate near 40 as msg/s gives a net backlog growth of about 25 msg/s (about 1500 msg/min), but the observed backlog grew by about 25 msg/min (137 to 1573 over about 57 minutes). Either the rate units or the queue consume metric is off, and the critic should check this.",
+   "evidence_ids": [
+    "E-126"
+   ]
+  },
+  {
+   "text": "The queue consume_rate (about 14.6) and portfolio-consumer rps (about 40 at 10:00 and 10:55, per E-106/E-107) disagree. The queue metric may count acks only, or completions may have dropped while requests continued. This is unresolved.",
+   "evidence_ids": [
+    "E-127"
+   ]
+  },
+  {
+   "text": "The flat 85.0 is consistent with a CPU quota ceiling or clamped reading: the ramp stops abruptly at 85.0 and the logs report the same 85% for about 70 minutes. Confirming a configured quota needs config data, which is outside this task.",
+   "evidence_ids": [
+    "E-139"
+   ]
+  },
+  {
+   "text": "Request rate does not explain the 09:54-09:55 throttle onset. Throttling rose while rps stayed flat, which points to a CPU quota or limit change or a CPU consumer that does not scale with requests. This is an inference and has not been confirmed against quota or config data.",
+   "evidence_ids": [
+    "E-162"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The trigger for the aa-sync throttle at about 09:55 is unidentified. No CPU quota or config data was retrieved, and the change feed may not capture all infrastructure changes.",
+  "Whether the flat 85.0 is a real quota ceiling or a metric artifact is unverified.",
+  "The queue consume_rate (about 15) disagrees with portfolio-consumer rps (about 40), and the rate units and backlog growth do not reconcile. Summary stats also do not match the point values.",
+  "Whether messages were lost or only delayed is unknown. Dead-letter count was 0, but retry, requeue, ack and drop lines were not searched, and the 10:30-11:00 portfolio-consumer timeouts rely on earlier claims.",
+  "The 09:57 timeout and the 09:04 and 09:08 log lines (E-010, E-014, E-065) were truncated and not re-verified. Host clock skew was not checked, so sub-minute ordering across services is unconfirmed.",
+  "The 18 msg-delivery receipt-delay IDs cannot be mapped to portfolio-update notifications, and the publisher of portfolio-updates was not confirmed. Provider-side metrics were unavailable.",
+  "Whether the 09:02 receipt delays contribute to late notifications is unknown. The consumer-to-notification path (portfolio-consumer to outbound-msgs) is not shown in the dependency graph.",
+  "aa-sync WARN logs after 10:53:18 were not retrieved, and the tool-call budget ran out before several checks could be done.",
+  "The rabbitmq metric summary contains only err_rate, latency_ms, memory_pct and rps. It has no queue depth, consume rate, publish rate, unacked, redelivery or DLQ metrics for portfolio-updates or outbound-msgs, so those charts could not be built and rate deviations are unverified.",
+  "No 7-day baseline was pulled, so it is not possible to tell a new onset from a gradual trend.",
+  "The depth figures come only from WARN log lines, which may be sampled and do not capture the oldest-message age.",
+  "No INFO-level clear message for the memory alarm was checked, so the exact recovery time is inferred from the metric.",
+  "Consumer-side logs (portfolio-consumer) were not queried, so the reason consumers are slow or stalled is unknown.",
+  "Dropped versus delayed messages cannot be fully separated: dead-letter and TTL-expiry logs were empty, but absence of logs is not proof.",
+  "query_logs returned 100 of 201 portfolio-consumer matches (truncated), so later timeouts beyond 10:27:13Z were not seen; the first timestamp is unaffected because results are oldest-first.",
+  "query_metrics was called without points, so no onset or time series is available for err_rate, latency_ms, rps or memory_pct. Deviation timing cannot be confirmed from metrics.",
+  "No CPU, GC, connection-pool or prefetch metrics appeared in the summaries for portfolio-consumer or msg-delivery, and no metrics were requested for those resources.",
+  "No targeted searches were run for ack/nack, reconnect, prefetch, consumer restart, 429, template or session errors, or retry/backoff. Absence of these lines is not confirmed.",
+  "wa-webhook and portfolio-svc were checked only at ERROR level, so their WARN lines (for example throttling or retries) were not reviewed.",
+  "aa-sync's own logs and metrics were not queried, so the cause of its timeouts is not verified.",
+  "The tool-call budget was exhausted before these gaps could be closed.",
+  "No metric points were requested, so the onset time of the aa-sync throttle and latency rise, and of the rabbitmq memory spike to 82, is unknown.",
+  "No logs were queried, so the error causes, timing and any lock or connection messages are unverified.",
+  "The postgres summary has no lock-wait, long-transaction or connection-count metric, so lock waits and long transactions were not checked.",
+  "The rabbitmq summary has no queue-depth, consumer, redelivery, dead-letter or flow-control/alarm metric. I could not check portfolio-updates depth or tell whether producers emitted fewer messages than consumers processed.",
+  "redis-cache, llm-gateway, auth-kyc, portfolio-svc, portfolio-consumer and msg-delivery were not queried, so the llm-gateway and auth-kyc latency hint and cache hit rate and evictions remain unverified.",
+  "The rabbitmq memory high-water mark and the aa-sync pool_max fractional values are not verified against configuration.",
+  "Onset time was not supplied and I had no access to metrics, so I could not confirm the 24h lookback was anchored to the first anomaly. The query used 2026-03-16 09:00 UTC as start.",
+  "The change feed returned no authors, so the requested change-author detail is missing for all items.",
+  "The change tool may not record RabbitMQ policy/definition, Redis or PostgreSQL parameter changes, messaging-provider template changes, cron jobs, certificate or secret rotations. A clean result here does not rule them out.",
+  "I did not query dependencies for msg-delivery or wa-webhook, which the hints ask to cover, so their downstream links to portfolio-updates are unverified.",
+  "search_incidents was not used, so no past incidents were checked against these symptoms.",
+  "No publisher of portfolio-updates or outbound-msgs was identified. portfolio-svc's result showed no queue publish edge, and no other producers were queried.",
+  "inbound-msgs was not queried, so its producers and consumers are unknown.",
+  "Dependencies were not retrieved for orchestrator, aa-sync, broker-gateway, market-data, llm-gateway, redis-cache, postgres or rabbitmq, so the shared-resource check (common postgres, redis or rabbitmq vhost across queues) could not be done.",
+  "No get_changes call was made, so no deploy, config, migration or flag changes near the 09:00–11:00 UTC window were checked.",
+  "search_incidents returned only one result (INC-0412) for a limit of 5, and only one query was run, so other similar past incidents (queue backlog, consumer stall, dropped messages) were not checked.",
+  "The call budget was used up, so no further narrowing was possible.",
+  "aa-sync WARN query was truncated: 220 matches, 200 returned oldest-first. Lines after 10:53:18 were not retrieved, so logs for 10:53 to 11:00 are missing.",
+  "Metrics were at 2-minute resolution, so onset is only bounded to between 09:52 and 09:54 for both aa-sync signals. Finer timing was not possible.",
+  "Summary 'last' values do not match the final points: aa-sync latency last 521.636 vs point 529.742 at 10:58, and portfolio-consumer last 493.076 vs point 493.931 at 10:58. The source of the summary value is unresolved.",
+  "Log-reported throttle percentages (19% at 09:55, 36% at 09:56) do not match the metric (11.188 at 09:54, 43.955 at 09:56). The two sources sample differently and were not reconciled.",
+  "No aa-sync request-rate or consent-volume metric was queried, so load as a trigger is untested.",
+  "The 09:57:27 timeout and 10:00:17 555ms budget were taken from existing team evidence (E-010, E-011, truncated). They were not re-verified against portfolio-consumer logs in this task.",
+  "Host clock skew was not assessed, so the sub-minute ordering across services is not confirmed.",
+  "I did not get per-queue time-series points for portfolio-updates at 5-minute steps. The two metric calls returned summaries only, so onset and drain timing are not measured here.",
+  "The rabbitmq call without a metric returned broker-level summaries only, not per-queue depth, publish, deliver/ack or unacked points.",
+  "The 'timeout' search missed 'timed out' wording, so T7-02 is not evidence of no timeouts. I did not re-search 'timed out' for 10:27-11:00 (it is covered by T7-05).",
+  "I only searched 'nack' for retry, requeue, drop, discard and dead-letter. Those terms were not searched, so message drops are not ruled out.",
+  "portfolio-consumer WARN logs from 08:00 to 10:20 were not fetched, so the 09:57 timeout (E-010) and the 'had no changes' lines from 09:08 (E-014) were not re-verified here.",
+  "No ERROR-level or INFO-level portfolio-consumer lines were checked, and redelivery and dead-letter counts only cover the summary. I cannot tell whether any messages were lost or never delivered.",
+  "Tool budget (about 5 calls) was reached, so I could not run more searches.",
+  "The msg-delivery metric list contains no provider-call metric (only err_rate, latency_ms, memory_pct, restarts_5m and rps), so provider throttling or 429 rates could not be measured.",
+  "The latency points start at 09:00:00Z even though 08:30 was requested, so 08:30 to 08:55 is unverified.",
+  "outbound-msgs was queried for its summary only, without points, so the depth onset is not shown. Its producer was not identified.",
+  "The receipt-delay log lines carry only message IDs, so the 18 IDs could not be mapped to portfolio-update notifications, templates or sessions.",
+  "I searched only WARN and above, not INFO, so INFO-level template or session lines were not checked. The msg-delivery and wa-webhook searches had no contains filter.",
+  "No trigger for the 09:55 throttle onset was identified. No aa-sync logs or deploy/config changes were queried in this call. The aa-sync log stream should be checked around 09:50 to 09:57 UTC.",
+  "Queries were 1-minute step over the full window, so sub-minute detail around 09:55 is not resolved.",
+  "No throttle or latency points were requested for portfolio-svc or portfolio-consumer, so their onset relative to aa-sync was not verified here.",
+  "cpu_throttle_pct stayed at exactly 85.0 for 61 consecutive minutes. This could be a ceiling, a metric fault, or a sampling artifact; the cause was not verified.",
+  "The metric alone does not show whether aa-sync's own consumers were slowed by throttling or whether throttling was caused by upstream load.",
+  "portfolio-updates publish_rate, consume_rate and depth were returned as summary stats only, with no points, so I could not compare queue rates before and after 10:00 directly.",
+  "consume_rate min 13.578 has no timestamp, so I cannot tell whether it falls in the 10:00 to 11:00 backlog period.",
+  "The definition of portfolio-consumer latency_ms is unknown (per message, or per batch or call). That blocks a direct per-message processing-time comparison and any concurrency calculation.",
+  "The number of in-flight messages per consumer is not reported, so I cannot test whether 3 consumers at about 500 ms each can sustain about 40 msg/s.",
+  "No logs were queried for this task (T10 used metrics only), so the consumer-side reason for the latency rise is unexamined here.",
+  "The aa-sync latency and call points were not requested in this task, so the link between the aa-sync timeouts and the latency step is not tested here.",
+  "oldest-message or head-of-queue age and unacked were not returned by query_metrics. The metric list was consume_rate, consumers, depth, dlq, publish_rate and redeliveries, so the end-to-end age of messages consumed at 10:00 and 10:55 cannot be measured.",
+  "depth points were not requested, so the backlog onset and its growth shape cannot be read from the depth series. Only the summary (max 1573.301) is available.",
+  "The requested points start at 09:00, not 08:00, even though the query asked from 08:00. The 08:00-09:00 segment is missing.",
+  "The 5-minute step cannot resolve the exact minute of the consume drop (it is somewhere between 09:50 and 09:55). The consume_rate stats min 13.578 and publish_rate min 36.977 fall between sampled points.",
+  "I did not search for what follows a timeout (retry, requeue, drop, discard, ack). The timeout query was WARN-level and matched only 'timed out'. Retry or ack lines at INFO or DEBUG were never searched, and the call budget was used up. Message fate after an aa-sync timeout is therefore unknown.",
+  "The timeout searches covered only 10:00-10:30. The 10:30-11:00 timeouts come from prior claims (E-077), not from this query.",
+  "No aa-sync config or quota value was retrieved, so the 85.0 ceiling cannot be confirmed as a configured limit.",
+  "Logs for 10:00-10:50 were not queried, so they are unverified.",
+  "The per-request CPU cost or the workload mix per request was not measured. rps only shows request count.",
+  "Latency points were not requested for aa-sync, so the latency onset relative to 09:55 comes from earlier, unverified claims.",
+  "Conflict: earlier claim E-056 says cpu_throttle_pct first rose at 09:54 to 11.188, but this result shows 09:54 = 2.981 and first rise at 09:55 = 19.395. The two sources disagree and should be reconciled.",
+  "Host clock skew between aa-sync and portfolio-consumer was not checked, so the ordering of the 09:55 onset against the 09:57 timeout is unconfirmed.",
+  "The dependency results do not show which service publishes to portfolio-updates. portfolio-svc is not confirmed as producer, and orchestrator's edges show no portfolio-updates link (T13-01).",
+  "No edge leads from portfolio-consumer to outbound-msgs, so the consumer-to-notification hop cannot be confirmed from the graph.",
+  "msg-delivery warnings have no message type, template or notification ID field, so the 18 delayed-receipt IDs cannot be mapped to portfolio-update notifications with this data.",
+  "I did not run get_changes for orchestrator or outbound-msgs, and I did not query point-level metrics for outbound-msgs or the notification path, because the call budget was used up.",
+  "search_incidents returned only two results, neither a close match for provider-side receipt delay. Matches are hints only and their root causes may not apply today.",
+  "The rate unit (per second or per minute) is not stated in either result, so the match to the backlog growth cannot be confirmed.",
+  "5-minute resolution cannot place the consume drop precisely within the 09:50 to 09:55 bucket, or show whether it was gradual or a step.",
+  "The summary stats (min 13.578, last 15.158) do not match the points (last point 14.908). The cause of the mismatch is unknown, and a finer-grained query would be needed to check.",
+  "Points show only the aggregate queue. They cannot separate acks from completions or show per-consumer behaviour, so a fall in consume_rate could reflect fewer successful acks rather than fewer consumers.",
+  "Host clock skew was not checked, so the ordering of the 09:55 consume drop against aa-sync onset is not verified.",
+  "The rps points only cover 09:45-09:59 (the query window ended at 10:00 with a 1-minute step), so the 10:00+ request rate was not examined in this task.",
+  "The 'consent' log search only matches lines containing that substring and does not give a per-request-type breakdown of aa-sync load, so total request mix is unknown.",
+  "No CPU quota, limit, or config data was queried here. Whether a quota change caused the 85.0 ceiling must come from the dependency or config agent.",
+  "The cpu_throttle_pct points were not requested in this call, so the exact throttle onset minute is taken from earlier evidence (E-056/E-093), not re-verified here.",
+  "The 85.0 plateau from 09:59 onward looks like a cap or saturated reading (E-101); this could not be checked against the raw CPU usage metric."
+ ],
+ "actions": [
+  {
+   "text": "Check aa-sync's configured CPU limit/quota and recent changes (including infrastructure or orchestrator-level changes the change feed may not record). Raise the CPU limit or restore the previous value, and watch cpu_throttle_pct and latency return toward about 3% and about 90 ms.",
+   "rationale": "Throttling at a flat 85% with latency about 6x baseline and no rise in request rate is the leading cause of the slowdown, and removing the constraint should stop the queue backlog growing.",
+   "evidence_ids": [
+    "E-094",
+    "E-097",
+    "E-128",
+    "E-162"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After aa-sync recovers, monitor portfolio-updates consume_rate and depth until the backlog of about 1573 messages drains. If it does not drain, consider temporarily adding portfolio-consumer capacity.",
+   "rationale": "The queue was backed up with a steady 3 consumers while consume_rate sat well below publish_rate, so confirmation of recovery and drain is needed to know delayed notifications will be delivered.",
+   "evidence_ids": [
+    "E-002",
+    "E-072",
+    "E-150",
+    "E-120"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Confirm that queued portfolio-updates messages were delayed rather than lost, by searching portfolio-consumer logs for ack, retry, requeue and drop behaviour after aa-sync timeouts and checking the users reporting missing notifications.",
+   "rationale": "Some users reported notifications not arriving at all, but the dead-letter count was 0 and the fate of messages after a timeout was never searched.",
+   "evidence_ids": [
+    "E-073",
+    "E-124",
+    "E-077"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Investigate the msg-delivery receipt delays separately: map the 18 delayed IDs to message types and check provider-side status and rate limits.",
+   "rationale": "The delays began about 52 minutes before the aa-sync symptoms and look unrelated, but the IDs cannot yet be tied to portfolio updates.",
+   "evidence_ids": [
+    "E-012",
+    "E-087",
+    "E-088",
+    "E-100"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerts on aa-sync cpu_throttle_pct and latency, and on portfolio-updates depth and consume_rate versus publish_rate. Reconcile the queue metric units and the mismatched summary-versus-point values.",
+   "rationale": "Throttling began at 09:55 and the backlog warning came only at 10:02, and the rate and unit inconsistencies limited this analysis.",
+   "evidence_ids": [
+    "E-001",
+    "E-093",
+    "E-126",
+    "E-153"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Once recovered, determine why aa-sync was throttled: compare the CPU request/limit history, per-request CPU cost and any background jobs, and review whether the flat 85.0 value reflects a real quota.",
+   "rationale": "The trigger remains unidentified, and whether it is a quota change or an internal CPU consumer decides the permanent fix.",
+   "evidence_ids": [
+    "E-101",
+    "E-134",
+    "E-138",
+    "E-163"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 63,
+  "tool_attempts": 63,
+  "llm_calls": 44,
+  "tokens_in": 499303,
+  "tokens_out": 105900,
+  "rounds": 3,
+  "elapsed_s": 420.2
+ },
+ "dropped_claims": 0
+}

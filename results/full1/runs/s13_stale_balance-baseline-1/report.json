@@ -1,0 +1,161 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Balances are stale because of a config change on portfolio-svc at 12:00 UTC: HOLDINGS_CACHE_TTL_S went from 60 to 1800. Cached holdings can now be served for up to 30 minutes, which matches trades missing for more than 10 minutes. The portfolio-updates queue and portfolio-consumer look healthy: depth is near 0, the DLQ is empty, consume rate tracks publish rate, and error rate is about 0.003. That points away from a pipeline backlog. The three earlier deploys (market-data, llm-gateway, broker-gateway) look unrelated, given their notes. I did not check portfolio-svc logs or cache hit metrics, so the causal link rests on timing and mechanism, not a direct measurement.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The HOLDINGS_CACHE_TTL_S increase from 60 to 1800 on portfolio-svc makes cached holdings and balances stale for up to 30 minutes.",
+   "component": "portfolio-svc",
+   "cause_type": "config_change_cache_ttl_too_long",
+   "score": 4.3,
+   "confidence": 0.683,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "TTL for holdings cache in portfolio-svc was raised 30x at 12:00 UTC, about 30 minutes before the report",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "portfolio-updates queue is not backed up and has no dead letters",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "Consumers keep up with publishers, so updates are processed",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate is low",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "With a 1800s TTL and no invalidation on portfolio updates, portfolio-svc serves holdings that are up to 30 minutes old, even though the consumer has processed the trades.",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The portfolio-updates pipeline (queue or portfolio-consumer) is lagging or failing and not applying trades.",
+   "component": "portfolio-consumer",
+   "cause_type": "consumer_lag",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "portfolio-updates queue is not backed up and has no dead letters",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "Consumers keep up with publishers, so updates are processed",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate is low",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "TTL for holdings cache in portfolio-svc was raised 30x at 12:00 UTC, about 30 minutes before the report",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "portfolio-updates queue is not backed up and has no dead letters",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "Consumers keep up with publishers, so updates are processed",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "portfolio-consumer error rate is low",
+   "evidence_ids": [
+    "E-004"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "With a 1800s TTL and no invalidation on portfolio updates, portfolio-svc serves holdings that are up to 30 minutes old, even though the consumer has processed the trades.",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "unresolved": [
+  "No direct measurement of cache hit rate or entry age in portfolio-svc or redis-cache.",
+  "portfolio-svc logs were not inspected.",
+  "It is unconfirmed whether portfolio-svc invalidates the cache on portfolio updates.",
+  "The first user-visible onset time is unconfirmed, though it was probably shortly after 12:00."
+ ],
+ "actions": [
+  {
+   "text": "Revert HOLDINGS_CACHE_TTL_S on portfolio-svc to 60, then flush or invalidate the holdings cache in redis-cache so stale entries clear now.",
+   "rationale": "The TTL change at 12:00 is the only change that matches the symptom, and a flush clears entries already cached with the long TTL.",
+   "evidence_ids": [
+    "E-001",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check portfolio-svc logs and cache hit/age metrics to confirm stale reads started after 12:00. Check whether the cache is invalidated when portfolio-consumer processes a trade.",
+   "rationale": "The causal link rests on timing and mechanism, not a direct measurement.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add cache invalidation on write, or review config changes that touch freshness-sensitive data.",
+   "rationale": "A TTL change alone should not make balances stale for 30 minutes.",
+   "evidence_ids": [
+    "E-001",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 23150,
+  "tokens_out": 6564,
+  "rounds": 0,
+  "elapsed_s": 104.2
+ },
+ "dropped_claims": 0
+}

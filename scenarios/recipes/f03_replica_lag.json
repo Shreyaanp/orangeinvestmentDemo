@@ -1,0 +1,30 @@
+{
+  "id": "f03_replica_lag",
+  "seed": 103,
+  "start": "2026-05-08T09:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Customers say their portfolio balance does not reflect trades they just made; it catches up minutes later. Started around 10:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 58,
+      "truth": {"component": "postgres", "cause_type": "read_replica_lag", "description": "The postgres read replica fell minutes behind the primary (replication lag), so portfolio reads served from it return holdings that predate recent trades."},
+      "effects": [
+        {"target": "postgres", "metric": "replication_lag_s", "op": "set", "value": 240, "ramp_min": 10}
+      ],
+      "logs": [
+        {"service": "postgres", "level": "WARN", "msg": "replica pg-replica-1 apply lag {replication_lag_s}s behind primary", "per_min": 2},
+        {"service": "portfolio-svc", "level": "WARN", "msg": "holdings read for user {rid} older than the user's last trade", "per_min": 2, "after_min": 3, "decisive": false}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 25,
+      "changes": [{"kind": "migration", "service": "postgres", "ref": "mig-0142", "note": "create index concurrently on trades(user_id)"}],
+      "logs": [{"service": "postgres", "level": "INFO", "msg": "migration mig-0142 completed in 41s", "per_min": 1}]
+    }
+  ],
+  "history_extra": [
+    {"id": "INC-0457", "date": "2026-03-30", "summary": "Stale portfolio balances shown to users after trades", "root_cause": "portfolio-svc holdings cache not invalidated after trade events", "fix": "Invalidate holdings cache on trade events; lowered cache TTL"}
+  ],
+  "trap": "a past incident with the same symptom blamed the cache; a postgres migration ran earlier and finished cleanly"
+}

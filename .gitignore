@@ -1,0 +1,54 @@
+# Python, tooling, local environment
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.import_linter_cache/
+.DS_Store
+/runs/
+.claude/settings.local.json
+src/graphify-out/
+
+# Not part of the submission: untested container files, the transcript exporter, generated pages
+Dockerfile
+.dockerignore
+src/scripts/export_transcript.py
+results/**/*.html
+
+# Docs: publish only the deliverables (README links to each); the rest are working notes
+docs/*
+!docs/ARCHITECTURE.md
+!docs/RESULTS.md
+!docs/SCENARIOS.md
+!docs/TECHNICAL_NOTE.md
+!docs/a01_walkthrough.html
+
+# Recorded model runs: publish only what the golden tests and the demo replay
+tapes/*
+!tapes/s[0-9][0-9]_*/
+!tapes/v2demo/
+!tapes/hybrid/
+!tapes/exp_rca_default/
+
+# Results: publish only the score files docs/RESULTS.md cites, and the saved reports tests/eval/kb.py reads
+results/*
+!results/full1/
+!results/full2/
+!results/lean1/
+!results/acc1/
+!results/acc1a/
+!results/acc1b/
+!results/v2demo/
+!results/exp_*/
+!results/hybrid1/
+!results/hybrid1_rca/
+results/*/runs/*/*
+!results/full1/runs/*/report.json
+!results/full2/runs/*/report.json
+!results/acc1a/runs/*/report.json
+!results/acc1b/runs/*/report.json

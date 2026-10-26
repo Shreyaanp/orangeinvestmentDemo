@@ -1,0 +1,525 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence; stopped early: time limit 420.0s reached",
+ "summary": "The most probable root cause is a cache-miss storm in redis-cache starting at 15:10: 8000 hot keys dropped at once (evicted_keys 0 to 8000, hit_ratio 0.967 to 0.35, held until 15:44), so portfolio-svc fell back to postgres and the postgres connection pool saturated (pool_waiting 35). Everything recovered together at 15:45. The mechanism behind the key loss is not established: redis logs show synchronized TTL expiry bursts of 8000 keys (about every 30-60s per the assumption) rather than memory-pressure eviction, and no restart, config change or recorded deploy explains it. The portfolio-svc latency impact is modest (about +30 ms), so it may not fully account for 'very slow' pages. The llm-gateway/orchestrator cost on balance answers is a standing cost that predates 15:10 and is not the trigger.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "redis-cache abruptly evicted holdings keys at 15:10 (evicted_keys 0 to 8000, hit_ratio 0.967 to 0.35 held until 15:44), so portfolio-svc fell back to postgres on most reads, saturating the postgres connection pool and adding latency to portfolio pages and orchestrator balance calls until both recovered at 15:45.",
+   "component": "redis-cache",
+   "cause_type": "cache_eviction_miss_storm",
+   "score": 3.45,
+   "confidence": 0.633,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "redis evicted_keys jumped from 0 to 8000 at 15:10 and hit_ratio fell from 0.967 (15:09) to 0.35 by 15:12, staying at the floor until 15:44 and recovering at 15:45.",
+     "evidence_ids": [
+      "E-090",
+      "E-091",
+      "E-092"
+     ]
+    },
+    {
+     "text": "portfolio-svc logged hit_ratio fallback-to-postgres warnings from 15:10:12Z until the last one at 15:44:58Z, matching the cache floor.",
+     "evidence_ids": [
+      "E-013",
+      "E-057"
+     ]
+    },
+    {
+     "text": "postgres pool_waiting rose at 15:10, saturated at 35 from 15:13 to 15:44 and returned to 0 at 15:45. portfolio-svc latency stepped up at 15:11 and fell at 15:45, in step with the cache recovery.",
+     "evidence_ids": [
+      "E-048",
+      "E-052",
+      "E-077"
+     ]
+    },
+    {
+     "text": "Redis logs show TTL expiry bursts of 8000 hot keys, starting at 15:10:14Z and ending 15:44:54Z, which matches the 8000 count and the floor window. It is likely (assumption) that these bursts, possibly from aligned TTLs, drive the misses and that the metric counts TTL expiries rather than LRU evictions.",
+     "evidence_ids": [
+      "E-120",
+      "E-122",
+      "E-129",
+      "E-142"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Memory stayed at about 55-60%, and there are no restart, evict, maxmemory, OOM or shutdown log lines, so the cause of the key loss is unexplained.",
+     "evidence_ids": [
+      "E-095",
+      "E-097"
+     ]
+    },
+    {
+     "text": "No change is recorded for redis-cache or portfolio-svc near onset, so the trigger is unidentified.",
+     "evidence_ids": [
+      "E-027"
+     ]
+    },
+    {
+     "text": "The portfolio-svc latency rise is only about +30 ms and web-app rose only about 10-20 ms, which is small against 'very slow' pages. The user-facing slowness may sit elsewhere (untested).",
+     "evidence_ids": [
+      "E-062",
+      "E-082"
+     ]
+    },
+    {
+     "text": "The portfolio-svc fallback warning at 15:10:12Z precedes the first burst log at 15:10:14Z, so sub-minute ordering is unclear. Single-key misses also continued after recovery, so the bursts are not the only factor.",
+     "evidence_ids": [
+      "E-132",
+      "E-059"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "llm-gateway and its external LLM provider add a steady ~1.4s (plus orchestrator ~0.9s) to assistant balance answers, so that path is slow independent of the portfolio cache problem, but this is a standing cost and does not explain a change at 15:10.",
+   "component": "llm-gateway",
+   "cause_type": "external_dependency_latency",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "llm-gateway carries the highest latency in the window (about 1.4 s) and sits on the balance-answer path via orchestrator, with sparse provider p95 WARN lines. This is a standing cost on that path.",
+     "evidence_ids": [
+      "E-086",
+      "E-031"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "llm-gateway latency and error rate show no step at 15:10 and were already about 1.4 s before onset, so it does not explain the change.",
+     "evidence_ids": [
+      "E-083",
+      "E-084",
+      "E-085"
+     ]
+    },
+    {
+     "text": "Orchestrator latency also shows no step at onset (about +2% by hand calculation).",
+     "evidence_ids": [
+      "E-054",
+      "E-055",
+      "E-063"
+     ]
+    },
+    {
+     "text": "It is likely (assumption) a steady-state cost rather than the trigger.",
+     "evidence_ids": [
+      "E-089"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "postgres connection-pool saturation is the primary bottleneck on the portfolio read path, independent of the cache, and the cache-miss warnings are a consequence of reads failing or timing out.",
+   "component": "postgres",
+   "cause_type": "connection_pool_saturation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "postgres pool_waiting rose in the same bucket as the portfolio-svc latency rise and recovered with it at 15:45. Note that the 15:10 pool_waiting value conflicts between queries (24.5 vs 8.75).",
+     "evidence_ids": [
+      "E-102",
+      "E-103"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "postgres slow_queries and replication lag were steady, and the only postgres deploy was a metrics-only label rename an hour earlier.",
+     "evidence_ids": [
+      "E-018",
+      "E-034"
+     ]
+    },
+    {
+     "text": "Pool waits began in the same minute as the cache drop and evictions, and the cache collapse is the more plausible driver of fallback load, so pool saturation looks like a consequence rather than an independent cause.",
+     "evidence_ids": [
+      "E-091",
+      "E-090"
+     ]
+    },
+    {
+     "text": "postgres latency peaked at only about 51 ms, and no timeout or retry lines appeared in portfolio-svc WARN logs.",
+     "evidence_ids": [
+      "E-017",
+      "E-060"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "portfolio-svc first logged the aggregate holdings cache-miss fallback at 15:10:12Z, with hit_ratio 0.768.",
+   "evidence_ids": [
+    "E-013"
+   ]
+  },
+  {
+   "text": "postgres latency_ms peaked at 51.19 (mean 19.113), with last 7.947.",
+   "evidence_ids": [
+    "E-017"
+   ]
+  },
+  {
+   "text": "postgres slow_queries stayed near 1 per sample, and replication_lag_s stayed below 0.42s, which weakens a slow-query or replication explanation.",
+   "evidence_ids": [
+    "E-018"
+   ]
+  },
+  {
+   "text": "orchestrator calls portfolio-svc (0.4), broker-gateway (0.3), and llm-gateway (0.7). The LLM provider sits behind llm-gateway on the balance-answer path and is an external dependency. Orchestrator also consumes inbound-msgs and publishes outbound-msgs.",
+   "evidence_ids": [
+    "E-031"
+   ]
+  },
+  {
+   "text": "A postgres deploy with the note 'metrics label rename' happened about an hour before onset. This is a candidate upstream of portfolio-svc (weight 0.8) but the note suggests a low-impact change.",
+   "evidence_ids": [
+    "E-034"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting saturated at 35.0 from 15:13 to 15:44 and returned to 0.0 at 15:45Z, matching the redis recovery.",
+   "evidence_ids": [
+    "E-048"
+   ]
+  },
+  {
+   "text": "portfolio-svc latency_ms returned to about 123 at 15:45Z, when the cache and pool metrics recovered.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "orchestrator latency_ms was already 935 at 14:33, before onset, and shows no step at 15:10 (955 there is within the pre-onset range).",
+   "evidence_ids": [
+    "E-054"
+   ]
+  },
+  {
+   "text": "orchestrator latency_ms at 15:10 was 955.125, within the pre-onset range, so orchestrator latency does not show a clear step at onset.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "portfolio-svc WARN log at 15:44:58Z is the last 'hit_ratio 0.35' fallback warning, which agrees with the metric floor ending at 15:44 and recovery at 15:45.",
+   "evidence_ids": [
+    "E-057"
+   ]
+  },
+  {
+   "text": "Single-key cache-miss warnings continued after the metric recovery (15:55:31Z), which weakens a claim that misses stop when hit_ratio recovers.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "The 15:31-16:00 portfolio-svc WARN query returned 61 lines, not truncated and not partial, so the earlier truncated tail is now covered. Timeout and retry lines are absent from the returned set.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "redis-cache hit_ratio recovered to 0.956 at 15:45, the same minute portfolio-svc latency fell.",
+   "evidence_ids": [
+    "E-077"
+   ]
+  },
+  {
+   "text": "llm-gateway latency_ms is flat across the window with no step at 15:10. The points before and after 15:10 are in the same band (14:00 is 1424.27, 15:00 is 1418.51, 15:10 is 1379.572, 15:30 is 1429.032). The result is complete, not partial.",
+   "evidence_ids": [
+    "E-083"
+   ]
+  },
+  {
+   "text": "llm-gateway latency_ms was already around 1.4 s at 14:00 UTC, before the reported onset. The summary mean for the window is 1401.249.",
+   "evidence_ids": [
+    "E-084"
+   ]
+  },
+  {
+   "text": "llm-gateway err_rate stayed flat at about 0.005–0.006 across the window, with no rise at 15:10.",
+   "evidence_ids": [
+    "E-085"
+   ]
+  },
+  {
+   "text": "llm-gateway logged 9 WARN lines for provider latency above p95 between 15:06 and 15:42, and the result was not truncated. This is the first matching WARN line, at 15:06.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "redis-cache hit_ratio was steady before onset and fell at 15:10 (0.967 at 15:09, 0.768 at 15:10, 0.549 at 15:11, 0.35 at 15:12).",
+   "evidence_ids": [
+    "E-090"
+   ]
+  },
+  {
+   "text": "redis-cache evicted_keys was 0.0 through 15:09 and jumped to 8000.0 at 15:10, the same minute as the first hit_ratio drop.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  },
+  {
+   "text": "evicted_keys stayed at 8000.0 from 15:10 to 15:44, then returned to 0.0 at 15:45. hit_ratio returned to 0.956 at the same minute.",
+   "evidence_ids": [
+    "E-092"
+   ]
+  },
+  {
+   "text": "Memory stayed low across the window (min 55.142, max 59.907, last 57.746), which weakens a memory-pressure explanation for the 8000 evictions.",
+   "evidence_ids": [
+    "E-095"
+   ]
+  },
+  {
+   "text": "A log search for 'restart' in redis-cache from 14:30 to 16:00 returned no lines and was not truncated.",
+   "evidence_ids": [
+    "E-097"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting was 0.0 through 15:05 and rose to 24.5 at the 15:10 bucket, the same bucket where portfolio-svc latency rose.",
+   "evidence_ids": [
+    "E-102"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting reached 35.0 at 15:15 and held at that value through 15:40, while portfolio-svc latency stayed elevated at about 150 to 153 ms over the same interval.",
+   "evidence_ids": [
+    "E-103"
+   ]
+  },
+  {
+   "text": "redis-cache logged the first ttl expiry burst of 8000 hot keys at 15:10:14Z, the onset minute.",
+   "evidence_ids": [
+    "E-120"
+   ]
+  },
+  {
+   "text": "The last ttl expiry burst in the 15:40-15:50 window is at 15:44:54Z. No later burst appears in that window, and the 15:45 recovery follows.",
+   "evidence_ids": [
+    "E-122"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "No change shortly before onset is recorded for portfolio-svc, portfolio-consumer, aa-sync, llm-gateway, orchestrator, redis-cache or rabbitmq, so the onset at about 15:10 is not explained by a recorded change in these services. Whether the trigger is an unrecorded change, a provider-side issue or load is untested.",
+   "evidence_ids": [
+    "E-027"
+   ]
+  },
+  {
+   "text": "The roughly +25-30 ms portfolio-svc latency rise is too small to account for pages described as 'very slow'. The user-facing slowness may sit on another path, such as llm-gateway or the orchestrator path. This is untested.",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "By hand, orchestrator latency averages about 896 ms over 14:30-15:09 and about 913 ms over 15:10-15:44 (about +2%). This is a rough calculation, not a tool result, and is not a clear step.",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "The web-app latency increase (about 10-20 ms at peak) is much smaller than the reported 'very slow' pages. Either the user-facing slowness comes from another path, or the metric averages it out.",
+   "evidence_ids": [
+    "E-082"
+   ]
+  },
+  {
+   "text": "Since llm-gateway latency is already at about 1.4 s before 15:10 and does not change at onset, it is probably a steady-state cost on the balance-answer path. It is unlikely to be the trigger for the 15:10 onset, though it may add to the slowness.",
+   "evidence_ids": [
+    "E-089"
+   ]
+  },
+  {
+   "text": "The ttl expiry bursts (8000 keys each) likely account for the evicted_keys 8000 metric and the hit_ratio floor. The count matches, but the log says 'expired' and the metric says 'evicted', so the metric may count TTL expiries rather than LRU evictions.",
+   "evidence_ids": [
+    "E-129"
+   ]
+  },
+  {
+   "text": "Timing: the portfolio-svc aggregate fallback warning at 15:10:12Z (E-013) comes about 2 seconds before the first burst log at 15:10:14Z. This does not support the earlier idea that the hit_ratio drop precedes the fallback. Clock skew or sub-minute resolution could explain it, so the order cannot be decided.",
+   "evidence_ids": [
+    "E-132"
+   ]
+  },
+  {
+   "text": "The '8000 hot keys expired' log lines and the metric value of 8000 may describe the same event. If so, the metric likely counts TTL expirations rather than memory-pressure evictions, which would explain why memory stayed around 55–60% (E-095) and why no 'evict' lines exist. This is unverified.",
+   "evidence_ids": [
+    "E-142"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Why the 8000 hot keys disappeared at 15:10 is not established: the TTL source, eviction policy and maxmemory were not checked, and a restart cannot be fully ruled out (no uptime metric; only the 'restart' log search was empty).",
+  "Whether the evicted_keys metric counts TTL expiries or LRU evictions, and whether the 8000 values and the flat 0.35 floor are real or metric artifacts.",
+  "Direction and sub-minute ordering between the cache drop, fallback logs and pool waits (portfolio-svc fallback WARN at 15:10:12Z precedes the first burst log at 15:10:14Z).",
+  "postgres pool_waiting at 15:10 conflicts between queries (24.5 vs 8.75). The plateau at 35 may be a configured pool limit, which was not checked.",
+  "The user-visible 'very slow' symptom is not reconciled with a roughly +30 ms portfolio-svc step; no tail, per-endpoint or prior-day baseline data was available, and portfolio-page and balance-answer requests were not separated.",
+  "The llm-gateway and redis-cache metric results were flagged partial, and some summaries disagree with later windows (for example means and the hit_ratio max).",
+  "The redis logs for 15:15-15:40 were searched only for ttl, and no logs were queried for postgres, rabbitmq, aa-sync or portfolio-consumer beyond WARN. Single-key misses continuing after 15:45 are unexplained.",
+  "Changes made outside the tracked change store (config, scheduled jobs, scaling) were not covered.",
+  "No timestamps in summary results, so onset per service at the minute level is unknown. Next step: query points for orchestrator latency_ms, llm-gateway latency_ms, portfolio-svc latency_ms, postgres pool_waiting and redis-cache evicted_keys/hit_ratio from 14:30 to 16:00.",
+  "No baseline: the same window on prior days/hours was not queried, so I cannot say how much any service deviated from normal.",
+  "No p50/p95/p99 breakdown: latency_ms is a single series, and the percentile split was not returned.",
+  "Portfolio page requests and assistant balance-answer requests were not separated, so I cannot tell whether the slowness is shared or distinct.",
+  "web-app was not queried for latency, error rate or throughput.",
+  "llm-gateway and redis-cache results are flagged partial ('some data sources did not respond'), so their values may be incomplete. The redis hit_ratio max of 1.006 is also suspect.",
+  "Log-level evidence (WHY) was not gathered because the budget was spent on metric summaries.",
+  "rabbitmq summaries have no queue metrics for portfolio-updates, inbound-msgs or outbound-msgs (depth, consumer lag, ack rate, message age, DLQ), so the queue side of the data path is unverified.",
+  "Metric calls returned summaries with points:null, so the onset of postgres latency and pool waits and the redis hit-ratio drop cannot be placed on a timeline beyond the portfolio-svc log lines.",
+  "portfolio-svc WARN query was truncated (total 157, returned 100, last line 15:31:35Z); nothing after 15:31:35Z was seen. Timeouts and retries were not searched for.",
+  "No logs were queried for redis-cache, postgres, rabbitmq, aa-sync, broker-gateway, market-data, llm-gateway or orchestrator, so the llm-gateway latency hint and the timeout/retry hint are unanswered.",
+  "portfolio-consumer was queried only at WARN, so its processing rate and any ERROR lines were not checked directly.",
+  "redis-cache hit_ratio max of 1.006 is impossible for a ratio and may be a metric artifact; its last value (0.958) conflicts with the portfolio-svc log showing 0.35 at 15:31:35Z, and the timing of 'last' is unknown.",
+  "Call budget (5 calls) is used up, so no further narrowing was possible.",
+  "The change tool returned no config, migration, flag or cron/batch records for any service. This may reflect what the tool tracks rather than what happened, so the absence is not proof that nothing changed.",
+  "Cache TTL/eviction changes, scheduled jobs, scaling changes and provider-side (broker or account-aggregator) notices are not covered by this tool and were not checked.",
+  "Records after 14:27Z were not found, so changes made between 14:27Z and 15:10Z would be missing if they were not tracked.",
+  "No get_dependencies or search_incidents calls were made for this task, so none of the three deploys has been tested against the call graph or past incidents.",
+  "Not queried (call budget): aa-sync, portfolio-consumer, redis-cache, postgres, web-app, wa-webhook, llm-gateway, broker-gateway. Their callers, callees and queue links, and whether they share the postgres instance or connection pools with portfolio-svc, are unverified.",
+  "rabbitmq returned zero edges, so it is unclear whether queues are modeled there or the query was incomplete. portfolio-updates producers and consumers are unknown.",
+  "The change query did not return config, migration or flag changes for the window, but I have not confirmed whether those kinds are fully covered in this change store.",
+  "Whether the 14:09 postgres label rename had any runtime effect on latency is not established by the dependency data. That needs observability checks.",
+  "The external broker and account-aggregator (aa-sync) dependencies on the path are not mapped, so their latency contribution is unknown.",
+  "All four search_incidents queries (T5-01 to T5-04) returned the same single result, INC-0412, so the search may have too few indexed incidents or may be matching loosely. A narrower or different query may surface other incidents, though I did not run one because of the call budget.",
+  "No runbook or known-issue entries for the portfolio-updates queue, rabbitmq, aa-sync or broker-gateway were returned, so this could not be confirmed either way.",
+  "I did not query get_changes or get_dependencies for this task, so I cannot say whether a Redis, postgres or aa-sync change happened near 15:10 UTC. This is left to the dependency and observability work.",
+  "Results are hints only. The past incident's full timeline and whether its root cause was confirmed or only suspected are not in the search output.",
+  "evicted_keys was not queried in this run, so the onset of evictions relative to the hit_ratio drop is unknown. Only the whole-window summary from earlier (max 8000) is available.",
+  "postgres latency_ms was not queried in this run, so its onset is unknown. Only the earlier whole-window summary is available.",
+  "llm-gateway latency_ms was not queried in this run, so its timeline and whether it deviates at onset are unknown.",
+  "No previous-day baseline was queried, so it is unknown whether orchestrator (about 900 ms) and portfolio-svc (about 120 ms) are regressions. The 5-call budget was reached.",
+  "The summary stats in this run cover 14:30-16:00 and differ from the earlier whole-window figures (portfolio-svc mean 131.767 vs 128.681; orchestrator min 850.488 vs 849.865). These are range differences, not reconciled.",
+  "The log re-run had no 'contains' filter. Timeout and retry lines were checked by manual scan of the 61 returned WARN-and-above lines, and none appeared. Lines below WARN, such as INFO retry logs, are not covered, so this is not proof of absence.",
+  "The 15:10:12 aggregate-fallback and 14:46:47 single-key-miss log lines come from the earlier truncated query and were not re-verified in this run.",
+  "No prior-day baseline for portfolio-svc: the 2026-03-23 15:10-15:35 query returned empty points, so the baseline comparison is missing and was not retried.",
+  "Only summary statistics were returned for web-app err_rate and rps, so their onset relative to 15:10 is unknown.",
+  "Pre-onset and onset-window means for portfolio-svc and web-app were compared by value ranges and peaks, not exact recomputed means.",
+  "Earlier summaries disagree with this call: portfolio-svc mean 128.681 (E-001) vs 131.767 here, and redis hit_ratio mean 0.788 (E-007/E-012) vs 0.729 here. The window or downsampling may differ; this was not resolved.",
+  "hit_ratio values above 1.0 appear before onset as well (e.g., 1.006 at 14:37), so the series has a data-quality artifact that could affect the magnitude of the drop.",
+  "No logs were queried for portfolio-svc or web-app, so the cause of the cache-miss fallback and the web-app path were not checked against log lines.",
+  "Postgres and redis evictions/latency were not re-queried in this task; they rely on earlier claims.",
+  "No prior-day baseline was returned. The request started at 2026-03-23T14:00Z, but both series begin at 2026-03-24T14:00Z, so the regression question cannot be settled from these results.",
+  "The stats (latency min 1291.245 / max 1546.472; err_rate max 0.008) do not match the downsampled points shown (latency about 1370–1429; err_rate 0.005–0.006). The extremes may fall outside the 10-minute sampling or be computed differently, so the summary and points disagree.",
+  "Only WARN and above were searched. DEBUG and INFO lines from llm-gateway and orchestrator were not read, so slow upstream calls logged at INFO would be missed.",
+  "No ERROR-specific query was run. ERROR is covered by the WARN filter, and the WARN results are not truncated, so the absence of timeouts and 429s at WARN is limited to this window and level.",
+  "Orchestrator latency was not re-queried in this task, so the orchestrator ~904 ms timeline and its onset are unchecked.",
+  "No uptime or restart-count metric exists for redis-cache in the summary, so a restart cannot be ruled out or confirmed from metrics.",
+  "The log search was limited to the substring 'restart'. Other terms (evict, maxmemory, OOM, flush, shutdown) and ERROR/WARN levels were not searched, so there is no redis-side explanation for the evictions yet.",
+  "Metrics are at 1-minute resolution, so ordering against 15:10:12Z is only approximate.",
+  "Latency and memory_pct were checked only as window summaries, not as time series, so their timing against onset is unknown.",
+  "No redis-cache configuration (maxmemory, eviction policy, TTL) was queried, so the cause of 8000 evictions with low memory is unexplained.",
+  "The discrepancies between the T9 summary and earlier E-007 values were not resolved; the source window for E-007 is unknown.",
+  "The redis-cache hit_ratio series was not queried in this task, so I could not test whether the latency and pool_waiting rise lags or leads the hit_ratio drop.",
+  "The series are downsampled to 5-minute steps, so sub-5-minute spikes are hidden. The stats max of 159.594 is not visible in the points.",
+  "The portfolio-svc stats.last (119.519) differs from the 15:55 point (119.892). The difference is unexplained and may reflect raw versus downsampled data.",
+  "No postgres connection-count or pool-size metric was queried, so the plateau at 35 cannot be checked against a limit.",
+  "No baseline beyond the 2-hour window, so the pre-15:10 level is a 14:00–15:05 comparison only.",
+  "p95/p99 latency and per-endpoint or holdings-endpoint latency are not exposed by either service's metric catalogue, so the tail and endpoint comparison requested in T11 could not be made.",
+  "orchestrator outbound call duration to portfolio-svc is not a metric in the returned catalogue, so it could not be checked.",
+  "The aggregation behind latency_ms (mean, avg, or sampled) is not stated, so it is unknown whether it hides a tail.",
+  "The whole-window portfolio-svc latency mean from T11-01/T11-03 (131.767) differs from the earlier E-001 mean (128.681). The windows differ, so the two were not merged.",
+  "No prior-day baseline was requested in this task, so the 15:10 step is not compared with a normal day.",
+  "This task did not query web-app or llm-gateway latency at 1-minute resolution, so the user-visible 'very slow' symptom is not reconciled with the roughly +30 ms portfolio-svc step.",
+  "Connection-count metric: not retrieved. The redis-cache metric summary has no connection-count metric (E-096), so this is unverifiable.",
+  "Eviction policy, maxmemory and TTL configuration: not retrieved. The config-keyword log search was empty and no config metric is present, so a policy or maxmemory change cannot be ruled in or out from my results.",
+  "Keyword coverage: evict, flush, OOM, shutdown, client and expire were only covered by the all-level searches in 15:05-15:15 and 15:40-15:50. The 15:15-15:40 window was searched only for ttl, and 14:00-15:05 and 15:50-16:00 were not searched at all-level.",
+  "Slowlog gap: no slowlog data was observed between 15:12:22 and 15:45:16 because 15:15-15:40 was not searched at all-level.",
+  "Origin of the synchronized TTLs: no log or metric identifies the writer or job that set the 8000 hot keys or their TTLs. A bulk write or warm-up is unverified.",
+  "Key-pattern shift: rps is aggregate and cannot show which keys were requested.",
+  "No results were truncated or partial in this turn. The 5-call budget is used up.",
+  "Eviction policy and maxmemory setting are not retrievable: my tools are only query_logs and query_metrics, and no config source was queried. Neither has been verified.",
+  "The metric-side check of maxmemory or memory_pct against a limit was not run, to stay within the call budget.",
+  "I did not search redis-cache logs for 'flush' or 'restart' in the 15:10 and 15:45 windows. Restart was checked earlier (E-097) with no lines, but flush is still unverified.",
+  "The 'evict' search returned zero lines even though the evicted_keys metric reads 8000. Either evictions are not logged or the metric is counting something else. Both are unresolved.",
+  "The 8000 TTL-burst count and the 8000 evicted_keys metric have not been reconciled, so the 8000 figure could be a sampling or counter artifact.",
+  "step_min=1 returns only minute-bucket points, so no sub-minute or raw series was available; the 15:10:12Z log timestamp is the only sub-minute anchor.",
+  "The log query covered only portfolio-svc WARN lines containing 'hit_ratio'. No postgres pool-wait logs, redis-cache logs or portfolio-svc latency logs were queried, so those sources are not checked at this timing.",
+  "The E-102 pool_waiting value (24.5 at 15:10) conflicts with this query's 8.75 at 15:10. Which value is correct is unresolved and needs a re-query of the same series with the same window.",
+  "No queue, consumer or request-level timing exists for portfolio-updates in this window, so the cause of the first drop in hit_ratio remains untested.",
+  "Budget: four calls were used for this task, leaving about one more call available if a reconciling query is needed."
+ ],
+ "actions": [
+  {
+   "text": "Treat the redis-cache key loss as the incident cause: check whether the hot-key set is repopulated with aligned TTLs, and if bursts recur, re-warm hot keys and stagger or jitter their TTLs.",
+   "rationale": "Bursts of 8000 hot keys expiring within one second line up with the hit_ratio floor and the postgres fallback load.",
+   "evidence_ids": [
+    "E-120",
+    "E-122",
+    "E-143"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Monitor redis hit_ratio, evicted_keys and postgres pool_waiting for recurrence. If the floor returns, pre-warm hot keys and consider temporarily raising the postgres pool or limiting fallback concurrency.",
+   "rationale": "The same pattern recovered at 15:45 without a recorded change, so it may recur. A past incident (INC-0412) was fixed by pre-warming hot keys, though that is a hint only.",
+   "evidence_ids": [
+    "E-048",
+    "E-092",
+    "E-039"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Identify the job or writer that set the 8000 hot keys and their TTLs, and verify redis TTL, maxmemory and eviction-policy configuration.",
+   "rationale": "No log or metric identifies the source of the synchronized expiries, and no config change is recorded.",
+   "evidence_ids": [
+    "E-130",
+    "E-027",
+    "E-127"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerts on redis hit_ratio drops and postgres pool_waiting, add a redis restart/uptime metric, and fix the hit_ratio above 1.0 artifact. Consider p95/per-endpoint latency for portfolio-svc.",
+   "rationale": "There is no restart or uptime metric, hit_ratio reads above 1.0 before onset, and portfolio-svc exposes no tail or endpoint latency.",
+   "evidence_ids": [
+    "E-096",
+    "E-046",
+    "E-116"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Separately review the llm-gateway and orchestrator latency contribution (about 1.4 s and about 0.9 s) to balance answers.",
+   "rationale": "It is a standing cost independent of the 15:10 onset and may be what users perceive as slow.",
+   "evidence_ids": [
+    "E-084",
+    "E-003",
+    "E-089"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 57,
+  "tool_attempts": 59,
+  "llm_calls": 38,
+  "tokens_in": 388457,
+  "tokens_out": 96767,
+  "rounds": 3,
+  "elapsed_s": 465.1
+ },
+ "dropped_claims": 0
+}

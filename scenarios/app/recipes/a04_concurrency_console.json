@@ -1,0 +1,26 @@
+{
+  "id": "a04_concurrency_console",
+  "seed": 404,
+  "start": "2026-10-22T09:00:00Z",
+  "minutes": 90,
+  "rate_per_min": 24,
+  "incident_at_min": 70,
+  "incident_text": "Replies on WhatsApp are taking many minutes to arrive since about 09:45 UTC. Answers are correct when they come.",
+  "changes": [
+    {"id": "tool-registry", "kind": "deploy", "service": "worker", "at_min": 37, "title": "refactor: build the tool registry with dict()", "author": "ananya",
+     "edits": [{"path": "src/worker.py", "find": "TOOLS = {\"portfolio\": portfolio.fetch, \"broker\": broker.order_status, \"aa\": aa.refresh}", "replace": "TOOLS = dict(portfolio=portfolio.fetch, broker=broker.order_status, aa=aa.refresh)"}]},
+    {"id": "cost-cap", "kind": "config", "service": "worker", "at_min": 41, "title": "PutFunctionConcurrency worker ReservedConcurrentExecutions=1 (console, cost cap)", "author": "ops-console",
+     "set": {"worker.reserved_concurrency": 1}}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "cost-cap",
+     "truth": {"component": "worker", "cause_type": "concurrency_limit_config", "description": "Someone set the worker Lambda's reserved concurrency to 1 from the console; one slot cannot keep up with ~24 messages/min at ~3s each, so SQS inbound backs up and replies wait minutes."},
+     "decisive": [
+       {"kind": "change", "service": "worker"},
+       {"kind": "metric", "service": "worker", "metric": "throttles", "min_value": 5},
+       {"kind": "metric", "service": "sqs-inbound", "metric": "oldest_age_s", "min_value": 120}
+     ]}
+  ],
+  "trap": "A worker deploy lands four minutes earlier; the real change is a console configuration change (CloudTrail), not in git and only visible with kinds=config.",
+  "answerable": true
+}

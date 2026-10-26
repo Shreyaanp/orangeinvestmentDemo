@@ -1,0 +1,47 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "msg-delivery",
+      "cause_type": "memory_leak_oom_crash_loop",
+      "description": "A msg-delivery release leaks memory, causing out-of-memory kills, a consumer crash loop and queue rebalancing, so outbound messages lag.",
+      "onset": "2026-04-01T08:50:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "WARN",
+          "contains": "memory usage",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-01T08:50:00Z",
+          "end": "2026-04-01T10:00:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "ERROR",
+          "contains": "worker killed: out of memory, restarting consumer",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-01T09:05:00Z",
+          "end": "2026-04-01T10:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "msg-delivery",
+          "level": null,
+          "contains": "msg-delivery-00277",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-01T08:49:00Z",
+          "end": "2026-04-01T10:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "queue lag looks like a producer burst; the real cause is a consumer crash loop after a leaky release"
+}

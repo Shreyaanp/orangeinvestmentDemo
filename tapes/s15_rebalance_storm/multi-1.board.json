@@ -1,0 +1,853 @@
+{
+ "incident_text": "WhatsApp replies are arriving late for many users, and some never arrive. Started around 09:00.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 23,
+  "tool_attempts": 23,
+  "llm_calls": 17,
+  "tokens_in": 96062,
+  "tokens_out": 28585
+ },
+ "round": 1,
+ "elapsed_s": 144.03905700000178,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "msg-delivery memory_pct starts rising off a ~54-57% baseline at 08:50, reaching 58.8% and climbing about 3 points per minute.",
+   "excerpt": "{\"ts\":\"2026-04-01T08:50:00Z\",\"value\":58.799}",
+   "source_call_id": "T1-06",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:50:00Z",
+   "ref": null,
+   "id": "E-001",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "msg-delivery memory_pct is at its ceiling of 99.0 from 09:04 and remains there through 09:39.",
+   "excerpt": "{\"ts\":\"2026-04-01T09:04:00Z\",\"value\":99.0}",
+   "source_call_id": "T1-06",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:04:00Z",
+   "ref": null,
+   "id": "E-002",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "The first msg-delivery ERROR in the queried window (from 08:30) is an out-of-memory consumer kill at 09:05:39, and the same error repeats roughly every minute after that.",
+   "excerpt": "2026-04-01T09:05:39Z ERROR msg-delivery: worker killed: out of memory, restarting consumer",
+   "source_call_id": "T1-05",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:05:39Z",
+   "ref": null,
+   "id": "E-003",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "msg-delivery err_rate summary shows a range up to 0.205 and a last value of 0.203, against a minimum of 0.003, so the error rate went high at some point in the window.",
+   "excerpt": "\"metric\":\"err_rate\",\"stats\":{\"min\":0.003,\"max\":0.205,\"mean\":0.094,\"last\":0.203,\"missing\":0}",
+   "source_call_id": "T1-04",
+   "service": "msg-delivery",
+   "ts": null,
+   "ref": null,
+   "id": "E-004",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "msg-delivery restarts_5m reached 5 and is at 5 at the end of the window.",
+   "excerpt": "\"metric\":\"restarts_5m\",\"stats\":{\"min\":0.0,\"max\":5.0,\"mean\":2.208,\"last\":5.0,\"missing\":0}",
+   "source_call_id": "T1-04",
+   "service": "msg-delivery",
+   "ts": null,
+   "ref": null,
+   "id": "E-005",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "Other services show only window summaries with no onset information: wa-webhook rps mean 59.877, orchestrator latency_ms mean 902.359 (max 966.078), llm-gateway latency_ms mean 1396.303 (max 1516.663).",
+   "excerpt": "\"metric\":\"latency_ms\",\"stats\":{\"min\":837.229,\"max\":966.078,\"mean\":902.359,\"last\":950.991,\"missing\":0}",
+   "source_call_id": "T1-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-006",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "msg-delivery latency_ms and rps summaries look close to normal, which weakens the idea that msg-delivery latency rose before the memory failure.",
+   "excerpt": "\"metric\":\"latency_ms\",\"stats\":{\"min\":235.528,\"max\":267.139,\"mean\":249.523,\"last\":255.112,\"missing\":0}",
+   "source_call_id": "T1-04",
+   "service": "msg-delivery",
+   "ts": null,
+   "ref": null,
+   "id": "E-007",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "ASSUMPTION",
+   "claim": "The flat 99.0 plateau looks like a capped or clamped reading, so the true memory use after 09:04 may be higher than shown.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-008",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-009": {
+   "kind": "ASSUMPTION",
+   "claim": "The memory climb from 08:50 is the earliest deviation in the pipeline, which would make msg-delivery memory exhaustion the root trigger of late or missing replies. This is not yet confirmed against the other services' onset times.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-009",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-010": {
+   "kind": "FACT",
+   "claim": "msg-delivery reports memory pressure first at 59% of limit in the WARN stream, the earliest memory warning in the window, and climbs to 99% by 09:04",
+   "excerpt": "2026-04-01T08:50:15Z WARN msg-delivery: memory usage 59% of limit, gc pressure high ... 2026-04-01T09:04:01Z WARN msg-delivery: memory usage 99% of limit, gc pressure high",
+   "source_call_id": "T2-05",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:50:15Z",
+   "ref": null,
+   "id": "E-010",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-011": {
+   "kind": "FACT",
+   "claim": "The earliest msg-delivery anomaly in the WARN stream is a delayed delivery receipt, about 15 minutes before the memory warnings start",
+   "excerpt": "2026-04-01T08:34:37Z WARN msg-delivery: delivery receipt delayed for id 587256",
+   "source_call_id": "T2-05",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:34:37Z",
+   "ref": null,
+   "id": "E-011",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-012": {
+   "kind": "FACT",
+   "claim": "The first consumer cancellation on the broker, caused by msg-delivery, occurs at 09:05:06",
+   "excerpt": "2026-04-01T09:05:06Z WARN rabbitmq: consumer cancelled: channel closed by msg-delivery, rebalancing consumers",
+   "source_call_id": "T2-05",
+   "service": "rabbitmq",
+   "ts": "2026-04-01T09:05:06Z",
+   "ref": null,
+   "id": "E-012",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-013": {
+   "kind": "FACT",
+   "claim": "The first OOM kill of a msg-delivery worker is the first ERROR in the window across all services. The ERROR query returned 83 lines, none truncated, all from msg-delivery",
+   "excerpt": "2026-04-01T09:05:39Z ERROR msg-delivery: worker killed: out of memory, restarting consumer",
+   "source_call_id": "T2-02",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:05:39Z",
+   "ref": null,
+   "id": "E-013",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-014": {
+   "kind": "FACT",
+   "claim": "Redelivery of outbound-msgs messages begins at 09:05:59 and recurs in batches of about 7 to 11 messages per restart cycle",
+   "excerpt": "2026-04-01T09:05:59Z WARN msg-delivery: redelivered 7 messages on outbound-msgs",
+   "source_call_id": "T2-05",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:05:59Z",
+   "ref": null,
+   "id": "E-014",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-015": {
+   "kind": "FACT",
+   "claim": "The first queue-depth warning for outbound-msgs in the WARN stream is at 09:09:04, with 2 consumers, and depth keeps rising to 598 by 09:18:11",
+   "excerpt": "2026-04-01T09:09:04Z WARN rabbitmq: queue outbound-msgs: 205 messages ready, 2 consumers ... 2026-04-01T09:18:11Z WARN rabbitmq: queue outbound-msgs: 598 messages ready, 2 consumers",
+   "source_call_id": "T2-05",
+   "service": "rabbitmq",
+   "ts": "2026-04-01T09:09:04Z",
+   "ref": null,
+   "id": "E-015",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-016": {
+   "kind": "FACT",
+   "claim": "outbound-msgs depth peaked at 2363.688 over the window, with mean 731.796",
+   "excerpt": "{\"service\":\"outbound-msgs\",\"metric\":\"depth\",\"stats\":{\"min\":0.0,\"max\":2363.688,\"mean\":731.796,\"last\":2363.688,\"missing\":0}}",
+   "source_call_id": "T2-03",
+   "service": "outbound-msgs",
+   "ts": null,
+   "ref": null,
+   "id": "E-016",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-017": {
+   "kind": "FACT",
+   "claim": "outbound-msgs consume rate averaged below publish rate (mean 40.988 vs 64.36), and consume rate's last value fell to 25.372",
+   "excerpt": "{\"service\":\"outbound-msgs\",\"metric\":\"consume_rate\",\"stats\":{\"min\":24.204,\"max\":64.807,\"mean\":40.988,\"last\":25.372,\"missing\":0}} ; {\"service\":\"outbound-msgs\",\"metric\":\"publish_rate\",\"stats\":{\"min\":49.352,\"max\":74.171,\"mean\":64.36,\"last\":67.109,\"missing\":0}}",
+   "source_call_id": "T2-03",
+   "service": "outbound-msgs",
+   "ts": null,
+   "ref": null,
+   "id": "E-017",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-018": {
+   "kind": "FACT",
+   "claim": "outbound-msgs consumers dropped to 2 (last value), down from a max of 4",
+   "excerpt": "{\"service\":\"outbound-msgs\",\"metric\":\"consumers\",\"stats\":{\"min\":2.0,\"max\":4.0,\"mean\":2.8,\"last\":2.0,\"missing\":0}}",
+   "source_call_id": "T2-03",
+   "service": "outbound-msgs",
+   "ts": null,
+   "ref": null,
+   "id": "E-018",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-019": {
+   "kind": "FACT",
+   "claim": "outbound-msgs redeliveries reached 10.591 at peak; dead-letter count stayed at 0",
+   "excerpt": "{\"service\":\"outbound-msgs\",\"metric\":\"redeliveries\",\"stats\":{\"min\":0.362,\"max\":10.591,\"mean\":6.539,\"last\":10.319,\"missing\":0}} ; {\"service\":\"outbound-msgs\",\"metric\":\"dlq\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}}",
+   "source_call_id": "T2-03",
+   "service": "outbound-msgs",
+   "ts": null,
+   "ref": null,
+   "id": "E-019",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-020": {
+   "kind": "FACT",
+   "claim": "inbound-msgs looks healthy: depth 0 throughout, 4 consumers constant, consume rate above publish rate",
+   "excerpt": "{\"service\":\"inbound-msgs\",\"metric\":\"depth\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}} ; {\"service\":\"inbound-msgs\",\"metric\":\"consumers\",\"stats\":{\"min\":4.0,\"max\":4.0,\"mean\":4.0,\"last\":4.0,\"missing\":0}}",
+   "source_call_id": "T2-04",
+   "service": "inbound-msgs",
+   "ts": null,
+   "ref": null,
+   "id": "E-020",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-021": {
+   "kind": "FACT",
+   "claim": "The RabbitMQ broker itself shows no errors and low latency, so the broker is not the bottleneck",
+   "excerpt": "{\"service\":\"rabbitmq\",\"metric\":\"err_rate\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}} ; {\"service\":\"rabbitmq\",\"metric\":\"latency_ms\",\"stats\":{\"min\":1.869,\"max\":2.16,\"mean\":2.003,\"last\":1.965,\"missing\":0}}",
+   "source_call_id": "T2-01",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-021",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-022": {
+   "kind": "FACT",
+   "claim": "Redis, postgres and llm-gateway slow-path warnings appear before the 09:00 onset at a sporadic background rate, which weakens them as the primary cause",
+   "excerpt": "2026-04-01T08:31:38Z WARN redis-cache: slowlog entry 669481 ; 2026-04-01T08:42:25Z WARN postgres: slow query logged: 842176 ; 2026-04-01T08:36:43Z WARN llm-gateway: provider latency above p95 for request 885637",
+   "source_call_id": "T2-05",
+   "service": "redis-cache",
+   "ts": "2026-04-01T08:31:38Z",
+   "ref": null,
+   "id": "E-022",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-023": {
+   "kind": "ASSUMPTION",
+   "claim": "msg-delivery is the sole consumer of outbound-msgs, and its OOM-restart loop is what limits outbound throughput. The exact onset of outbound depth growth is not verified because the metric was queried without points.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-023",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-024": {
+   "kind": "ASSUMPTION",
+   "claim": "The redelivery counts are consistent with messages being re-queued each time a msg-delivery worker is killed. That is a retry pattern tied to restarts, not a confirmed unbounded retry storm.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-024",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-025": {
+   "kind": "FACT",
+   "claim": "A msg-delivery deploy went out at 08:49 UTC with a batch size change for delivery receipts. It is about 11 minutes before the reported 09:00 onset and is a candidate, not a confirmed cause.",
+   "excerpt": "\"ts\":\"2026-04-01T08:49:00Z\",\"kind\":\"deploy\",\"service\":\"msg-delivery\",\"ref\":\"msg-delivery-00277\",\"note\":\"batch size increase for delivery receipts\"",
+   "source_call_id": "T3-01",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:49:00Z",
+   "ref": null,
+   "id": "E-025",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-026": {
+   "kind": "FACT",
+   "claim": "An orchestrator deploy went out at 08:25 UTC with a metrics label rename. It is about 35 minutes before onset and a label rename is unlikely to change message behaviour.",
+   "excerpt": "\"ts\":\"2026-04-01T08:25:00Z\",\"kind\":\"deploy\",\"service\":\"orchestrator\",\"ref\":\"orchestrator-00797\",\"note\":\"metrics label rename\"",
+   "source_call_id": "T3-01",
+   "service": "orchestrator",
+   "ts": "2026-04-01T08:25:00Z",
+   "ref": null,
+   "id": "E-026",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-027": {
+   "kind": "FACT",
+   "claim": "The change query returned only these two items with no truncation, so no config, migration, flag, secret or scaling change was recorded in the window for any listed service.",
+   "excerpt": "\"total\":2,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T3-01",
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-027",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-028": {
+   "kind": "FACT",
+   "claim": "msg-delivery consumes from the outbound-msgs queue. A change on msg-delivery can therefore affect delivery of messages that orchestrator publishes.",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"outbound-msgs\",\"weight\":null}",
+   "source_call_id": "T3-03",
+   "service": "msg-delivery",
+   "ts": null,
+   "ref": null,
+   "id": "E-028",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-029": {
+   "kind": "FACT",
+   "claim": "orchestrator publishes to outbound-msgs and consumes from inbound-msgs. Its synchronous callees are llm-gateway (0.7), portfolio-svc (0.4), broker-gateway (0.3), redis-cache (0.3), market-data (0.2) and auth-kyc (0.1).",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"outbound-msgs\",\"weight\":null}",
+   "source_call_id": "T3-04",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-029",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-030": {
+   "kind": "FACT",
+   "claim": "Past-incident search for outbound-queue delivery delay returned no matches, so no past analogue is available.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T3-02",
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-030",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-031": {
+   "kind": "ASSUMPTION",
+   "claim": "Symptoms of late or missing WhatsApp replies fit a consumer-side slowdown or loss on msg-delivery after the 08:49 batch size change, but nothing returned confirms this.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-031",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-032": {
+   "kind": "FACT",
+   "claim": "wa-webhook is the producer of inbound-msgs.",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"inbound-msgs\",\"weight\":null}",
+   "source_call_id": "T4-01",
+   "service": "wa-webhook",
+   "ts": null,
+   "ref": null,
+   "id": "E-032",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-033": {
+   "kind": "FACT",
+   "claim": "orchestrator consumes inbound-msgs.",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"inbound-msgs\",\"weight\":null}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-033",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-034": {
+   "kind": "FACT",
+   "claim": "orchestrator publishes replies to outbound-msgs.",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"outbound-msgs\",\"weight\":null}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-034",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-035": {
+   "kind": "FACT",
+   "claim": "orchestrator's heaviest synchronous dependency is llm-gateway (weight 0.7).",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"llm-gateway\",\"weight\":0.7}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-035",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-036": {
+   "kind": "FACT",
+   "claim": "orchestrator calls portfolio-svc with weight 0.4.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"portfolio-svc\",\"weight\":0.4}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-036",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-037": {
+   "kind": "FACT",
+   "claim": "orchestrator calls redis-cache with weight 0.3, so redis-cache is a shared dependency to check.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"redis-cache\",\"weight\":0.3}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-037",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-038": {
+   "kind": "FACT",
+   "claim": "orchestrator also calls broker-gateway (0.3), market-data (0.2) and auth-kyc (0.1). These are side-path dependencies, not core reply-path ones.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"broker-gateway\",\"weight\":0.3}, {\"direction\":\"calls\",\"name\":\"market-data\",\"weight\":0.2}, {\"direction\":\"calls\",\"name\":\"auth-kyc\",\"weight\":0.1}",
+   "source_call_id": "T4-02",
+   "service": "orchestrator",
+   "ts": null,
+   "ref": null,
+   "id": "E-038",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-039": {
+   "kind": "FACT",
+   "claim": "msg-delivery consumes outbound-msgs and is the last hop before delivery.",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"outbound-msgs\",\"weight\":null}",
+   "source_call_id": "T4-03",
+   "service": "msg-delivery",
+   "ts": null,
+   "ref": null,
+   "id": "E-039",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-040": {
+   "kind": "FACT",
+   "claim": "The rabbitmq query returned no edges, so no queue topology is recorded for rabbitmq itself.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T4-04",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-040",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-041": {
+   "kind": "ASSUMPTION",
+   "claim": "Because orchestrator calls llm-gateway with the highest weight and sits between the two queues, a slowdown or failure in llm-gateway would most likely appear first as orchestrator latency and then as delayed outbound-msgs, which would match late or missing replies. This has not been verified.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-041",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-042": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0412 (late balance notifications) was attributed to a Redis restart that evicted hot context, causing a cache stampede on portfolio-svc. This is a past incident, used only as a hypothesis.",
+   "excerpt": "\"root_cause\":\"Redis restart evicted hot context, cache stampede on portfolio-svc\"",
+   "source_call_id": "T5-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-042",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-043": {
+   "kind": "FACT",
+   "claim": "INC-0412's fix was to restart redis and pre-warm hot keys. This is historical and does not confirm a Redis restart happened in the current incident.",
+   "excerpt": "\"fix\":\"Restarted redis and pre-warmed hot keys\"",
+   "source_call_id": "T5-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-043",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-044": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0388 was account aggregator data fetch failures caused by bank-side FIP downtime. It is unrelated to WhatsApp delivery delays.",
+   "excerpt": "\"root_cause\":\"Bank-side FIP downtime\"",
+   "source_call_id": "T5-04",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-044",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-045": {
+   "kind": "FACT",
+   "claim": "Search for rabbitmq consumer and inbound-msgs/outbound-msgs backlog incidents returned no matches.",
+   "excerpt": "\"items\":[],\"total\":0",
+   "source_call_id": "T5-01",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-045",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-046": {
+   "kind": "FACT",
+   "claim": "Search for postgres connection pool exhaustion affecting orchestrator or llm-gateway returned no matches.",
+   "excerpt": "\"items\":[],\"total\":0",
+   "source_call_id": "T5-03",
+   "service": "postgres",
+   "ts": null,
+   "ref": null,
+   "id": "E-046",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-047": {
+   "kind": "ASSUMPTION",
+   "claim": "No past incident in the index covers LLM provider throttling at llm-gateway or a 09:00 daily spike. The search may be missing such incidents because the query wording or index coverage is limited, so this is not proof they never happened.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-047",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "The msg-delivery deploy at 08:49 (batch size increase for delivery receipts) causes memory growth from 08:50 to the ceiling by 09:04, after which workers are OOM-killed and restart, consumers drop, and outbound-msgs backs up, delaying or losing replies.",
+   "component": "msg-delivery",
+   "cause_type": "bad_code_release_memory_exhaustion",
+   "supporting": [
+    "E-025",
+    "E-001",
+    "E-010",
+    "E-003",
+    "E-012",
+    "E-014",
+    "E-015",
+    "E-017",
+    "E-018",
+    "E-020",
+    "E-021"
+   ],
+   "contradicting": [
+    "E-011",
+    "E-007"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "A slowdown in llm-gateway (the heaviest orchestrator dependency) delays orchestrator reply production and the outbound-msgs flow, producing late replies independently of msg-delivery.",
+   "component": "llm-gateway",
+   "cause_type": "dependency_slowdown",
+   "supporting": [],
+   "contradicting": [
+    "E-022",
+    "E-013",
+    "E-020",
+    "E-018"
+   ],
+   "compatible_with": [
+    "H1"
+   ],
+   "status": "active"
+  },
+  "H3": {
+   "id": "H3",
+   "statement": "A redis-cache disruption (eviction or restart) causes a cache stampede on portfolio-svc and orchestrator, slowing replies, as in INC-0412.",
+   "component": "redis-cache",
+   "cause_type": "cache_failure_stampede",
+   "supporting": [],
+   "contradicting": [
+    "E-022",
+    "E-020",
+    "E-027"
+   ],
+   "compatible_with": [
+    "H1"
+   ],
+   "status": "active"
+  }
+ },
+ "tasks": {
+  "T1": {
+   "id": "T1",
+   "agent": "observability",
+   "goal": "Establish the timeline of the incident: using metrics, find the exact onset (around 09:00 and the minutes before) of increased end-to-end reply latency and dropped/missing replies. Chart per-minute inbound message rate at wa-webhook, orchestrator processing latency, llm-gateway latency and error rate, and msg-delivery send success/failure rate, and identify which signal degraded first.",
+   "hints": [
+    "Compare 08:30-10:00 against the same window the previous day and week",
+    "Break down by service to find the first one to deviate",
+    "Check whether the failures are uniform or affect a subset of users/message types"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "msg-delivery memory_pct climbs steadily from about 54-57% (08:30-08:49) to 58.8% at 08:50 and reaches 99.0% by 09:04, where it stays through 09:39. The first msg-delivery ERROR in the window is at 09:05:39, an out-of-memory worker kill that repeats about every minute, with restarts_5m at 5 by the end. Memory is the earliest deviation I could confirm; I could not get per-minute series for wa-webhook, orchestrator, llm-gateway or msg-delivery err_rate, so their onset relative to 08:50 is unverified.",
+   "error": null
+  },
+  "T2": {
+   "id": "T2",
+   "agent": "observability",
+   "goal": "Inspect queue and backlog behaviour on rabbitmq for inbound-msgs, outbound-msgs and portfolio-updates from 08:30 onward: queue depth, publish vs consume rates, consumer counts, unacked messages, redelivery and dead-letter counts. Also collect error and timeout log patterns from wa-webhook, orchestrator, llm-gateway, msg-delivery, portfolio-consumer, redis-cache and postgres (connection pool saturation, slow queries, evictions, timeouts) around the onset.",
+   "hints": [
+    "Note which queue starts growing first and whether consumers dropped or slowed",
+    "Look for first-occurrence timestamps of new error messages",
+    "Check for retry storms or duplicate deliveries"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The first deviation is msg-delivery memory pressure, not the broker. Its memory warnings climb from 59% at 08:50:15Z to 99% by 09:04:01Z, and consumer cancellations begin at 09:05:06Z. OOM kills of msg-delivery workers start at 09:05:39Z, and all 83 ERROR lines in the window are msg-delivery. outbound-msgs is the only queue that stalls: its consume rate runs below its publish rate, consumers drop to 2, redeliveries appear, and depth peaks at 2363.688. inbound-msgs and the RabbitMQ broker itself look healthy. Redis, postgres and llm-gateway slow-path warnings appear before onset at a low background rate, which weakens them as the primary cause.",
+   "error": null
+  },
+  "T3": {
+   "id": "T3",
+   "agent": "dependency",
+   "goal": "Find every kind of change near the incident time (roughly 07:30-09:15): deploys and rollouts, config changes, environment variable or secret changes, database migrations, feature flag flips, scaling or infrastructure changes, rate-limit or credential/token expiries, for any of the listed services (wa-webhook, orchestrator, llm-gateway, portfolio-svc, aa-sync, broker-gateway, order-router, market-data, auth-kyc, portfolio-consumer, msg-delivery, web-app, redis-cache, postgres, rabbitmq). Report timestamps, authors and what changed.",
+   "hints": [
+    "Do not limit to deploys; include flags, config, migrations and cron/scheduled jobs",
+    "Include changes by third parties such as WhatsApp API or LLM provider status notices if recorded"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The only changes returned for 07:30-09:15 UTC across all services and all requested kinds (deploy, config, migration, flag) are two deploys: orchestrator-00797 at 08:25 (metrics label rename) and msg-delivery-00277 at 08:49 (batch size increase for delivery receipts). The msg-delivery deploy is the most plausible candidate because msg-delivery consumes from outbound-msgs, which orchestrator publishes to, and it landed about 11 minutes before the 09:00 onset. Neither deploy records an author, and past-incident search returned nothing, so the candidate is unconfirmed.",
+   "error": null
+  },
+  "T4": {
+   "id": "T4",
+   "agent": "dependency",
+   "goal": "Map the service topology and queue links for the reply path: who produces and consumes inbound-msgs, outbound-msgs and portfolio-updates, and the synchronous dependencies of wa-webhook, orchestrator, llm-gateway, msg-delivery, portfolio-svc, aa-sync, portfolio-consumer, redis-cache, postgres and rabbitmq. Identify shared resources (databases, cache, connection pools, external APIs) so downstream effects can be distinguished from upstream causes.",
+   "hints": [
+    "Identify which services sit on the WhatsApp reply path vs. side paths like order-router or market-data",
+    "Note shared dependencies that could affect multiple services at once"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The reply path runs wa-webhook → inbound-msgs → orchestrator → outbound-msgs → msg-delivery. orchestrator is the central node: it makes synchronous calls with weights llm-gateway 0.7, portfolio-svc 0.4, broker-gateway 0.3, redis-cache 0.3, market-data 0.2 and auth-kyc 0.1. broker-gateway, market-data and auth-kyc are not on the core reply path. I did not query llm-gateway, portfolio-svc, aa-sync, portfolio-consumer, redis-cache or postgres, so the downstream blast radius and the portfolio-updates queue are not mapped, and no shared-resource conclusions can be drawn yet.",
+   "error": null
+  },
+  "T5": {
+   "id": "T5",
+   "agent": "dependency",
+   "goal": "Search past incidents for similar symptoms: delayed or missing WhatsApp replies, growing queue backlogs on inbound-msgs/outbound-msgs, slow llm-gateway responses, delivery failures. Summarize what was observed, how each was diagnosed and resolved, and which signals distinguished them, treating these only as hints.",
+   "hints": [
+    "Include incidents involving rabbitmq consumers, redis-cache, postgres pools and LLM provider throttling",
+    "Note any recurring time-of-day pattern around 09:00"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "Four past-incident searches returned only two hits, and neither matches the current symptoms closely. INC-0412 (2026-01-18) involved a Redis restart that evicted hot context and caused a cache stampede on portfolio-svc, which produced late balance notifications; it is a possible pattern to test against redis-cache and portfolio-svc, not a diagnosis. INC-0388 (2025-12-09) was a bank-side account aggregator outage, which is unrelated. The searches for rabbitmq consumer backlogs, postgres pool exhaustion and LLM provider throttling returned nothing, so there is no past precedent for those causes here, and no recurring 09:00 pattern was found.",
+   "error": null
+  }
+ },
+ "challenges": {},
+ "gaps": [],
+ "notes": [
+  "No per-minute time series for wa-webhook rps, orchestrator latency_ms, llm-gateway latency_ms/err_rate, or msg-delivery err_rate, so onset ordering versus msg-delivery memory is unverified. I used the call budget on summaries and one memory series.",
+  "No previous-day or previous-week baseline was queried, so 'normal' is inferred from the 08:30-08:49 values only.",
+  "msg-delivery ERROR log query returned 50 lines with truncated=true (83 total matches). Errors after 09:37:58 and any non-OOM errors were not checked.",
+  "Failure breakdown by user segment or message type was not done, so it is unknown whether the failures are uniform.",
+  "No logs were queried for wa-webhook, orchestrator, llm-gateway, or the rabbitmq queues (inbound-msgs, outbound-msgs), so their error and backlog signals are unknown.",
+  "The msg-delivery err_rate summary has no timestamps, so it cannot be placed relative to the 08:50 memory onset.",
+  "Metric queries were made without `points`/step, so no timestamps exist for when outbound-msgs depth, consume rate or consumer count started changing. Onset is inferred from log lines only.",
+  "No metrics were queried for msg-delivery memory, for inbound-msgs redeliveries over time, or for portfolio-updates. The portfolio-updates queue was not examined at all.",
+  "The unacked-message count is not among the metrics returned, so it could not be verified.",
+  "The WARN result was truncated at 544 matches. Only lines up to 09:18:11Z were seen, so the later trajectory and any late-window messages are unknown.",
+  "No per-service queries were run for wa-webhook, orchestrator, llm-gateway, portfolio-consumer, redis-cache or postgres for timeouts, pool saturation or evictions. Their presence in this report comes only from the generic WARN sweep. The ERROR sweep found no ERROR lines from those services, but absence of logs is not proof of health.",
+  "Clock skew was not assessed. No service logged trouble before its dependency, so no ordering inversion was observed.",
+  "Change records have no author, source or URL fields populated (source null), so authors could not be reported.",
+  "No config, migration, flag, secret, credential-expiry, scaling, cron or third-party provider notice was returned. This may mean none occurred or that they are not recorded in this system; the absence is weak evidence.",
+  "Dependency data for wa-webhook, llm-gateway, postgres, rabbitmq, redis-cache, portfolio-consumer and whatsapp-side notices was not retrieved within the call budget, so the blast radius beyond orchestrator and msg-delivery is unverified.",
+  "msg-delivery's own outgoing calls and publishes were not returned, so its downstream effects are unknown.",
+  "No past incidents matched, so there is no historical comparison for this symptom pattern.",
+  "llm-gateway, portfolio-svc, aa-sync, portfolio-consumer, redis-cache and postgres were not queried, because the call budget (about 4) was used on the first four services. Their callers, callees and queue links are unknown.",
+  "The portfolio-updates queue has no producer or consumer identified yet. portfolio-consumer, the likely consumer, was not queried.",
+  "rabbitmq returned no edges, which may mean the tool does not model broker-level links. Queue producers and consumers are known only from the service side.",
+  "Dependency results carry no timestamps and show topology only, not whether any change occurred near 09:00 UTC. Change history was not checked in this task.",
+  "order-router was not queried and is not on the reply path per the hint, but its links are unverified.",
+  "Searches for LLM provider throttling and the 09:00 daily spike both returned nothing (T5-04 returned only the unrelated INC-0388), so those hypotheses have no past precedent in this index.",
+  "No incident details are available for the recurring time-of-day pattern hinted at around 09:00; the hint could not be checked against history.",
+  "Each past incident has only a summary, root cause and fix. There are no timelines, diagnosis steps or distinguishing signals, so whether INC-0412's signals match this incident cannot be verified.",
+  "The search returned only 1-2 hits per query with limit=5, so coverage is thin and the absence of matches is weak evidence. Current change records and metrics were not checked as part of this task."
+ ],
+ "rejected": []
+}

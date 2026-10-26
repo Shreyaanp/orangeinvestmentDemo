@@ -1,0 +1,29 @@
+{
+  "id": "f05_prompt_config",
+  "seed": 105,
+  "start": "2026-05-13T15:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Many assistant conversations end with 'Sorry, something went wrong' since about 16:00. The LLM provider status page is green.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "orchestrator", "cause_type": "prompt_config_change", "description": "A configuration change switched the orchestrator's planner prompt to version v42, whose output is prose instead of the expected JSON tool plan, so plans fail to parse and conversations abort."},
+      "effects": [
+        {"target": "llm-gateway", "metric": "parse_fail_pct", "op": "set", "value": 0.35, "ramp_min": 2},
+        {"target": "orchestrator", "metric": "err_rate", "op": "add", "value": 0.2, "ramp_min": 2}
+      ],
+      "logs": [
+        {"service": "orchestrator", "level": "ERROR", "msg": "could not parse tool plan from model output (planner prompt v42): expected JSON object, got prose", "per_min": 6},
+        {"service": "llm-gateway", "level": "WARN", "msg": "completion failed caller schema check, parse_fail_pct {parse_fail_pct}", "per_min": 1, "decisive": false}
+      ],
+      "changes": [{"kind": "config", "service": "orchestrator", "ref": "cfg-planner-prompt", "note": "PLANNER_PROMPT_VERSION v41 -> v42", "offset_min": 0}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 56,
+      "changes": [{"kind": "deploy", "service": "llm-gateway", "ref": "llm-gateway-00388", "note": "bump http client to 2.31"}]
+    }
+  ],
+  "tool_faults": [{"tool": "get_changes", "kind": "timeout", "on_calls": [1]}],
+  "trap": "the change is a config change (not a deploy) and the first change lookup times out; the failure metric sits on llm-gateway, which deployed four minutes earlier"
+}

@@ -1,0 +1,195 @@
+{
+ "status": "INCONCLUSIVE",
+ "status_reason": "top confidence 0.0 is below 0.45",
+ "summary": "Evidence is partial and points to a data-layer problem. Redis-cache hit ratio fell to 0.35 with 8000 evicted keys, and postgres pool_waiting reached 35 at the end of the window. This fits slow portfolio and balance reads, since portfolio-svc calls postgres with weight 0.8 and redis-cache with weight 0.2. No change near 15:10 explains it; the only deploys were metrics-label and log-level changes at 14:09 to 14:27. Two things are unresolved: portfolio-svc's own latency summary (max 155 ms) does not show an obvious slowdown, and I did not pull time series to confirm the onset order between redis and postgres.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "redis-cache is evicting keys and its hit ratio has collapsed, so more reads fall through to postgres and portfolio and balance reads slow down. The eviction cause is unknown because memory is only about 60%.",
+   "component": "redis-cache",
+   "cause_type": "cache_eviction_hit_ratio_collapse",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "redis-cache hit ratio dropped to 0.35 by the end of the window, with evictions",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "redis-cache evicted up to 8000 keys while memory was only about 60%",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "portfolio-svc depends mostly on postgres",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "postgres request rate stayed flat, so the pool waits are not explained by extra query volume",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "portfolio-svc latency summary shows only modest elevation, which does not clearly match the reported slowness",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "postgres connection pool saturation (pool_waiting 35) with raised latency is the direct cause of slow reads, independent of or downstream of the cache problem.",
+   "component": "postgres",
+   "cause_type": "connection_pool_saturation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "postgres connection pool had 35 waiters at the end of the window",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "postgres latency rose well above its mean toward the end of the window",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-svc depends mostly on postgres",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "postgres request rate stayed flat, so the pool waits are not explained by extra query volume",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "portfolio-svc latency summary shows only modest elevation, which does not clearly match the reported slowness",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "redis-cache hit ratio dropped to 0.35 by the end of the window, with evictions",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "redis-cache evicted up to 8000 keys while memory was only about 60%",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "postgres connection pool had 35 waiters at the end of the window",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "postgres latency rose well above its mean toward the end of the window",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-svc depends mostly on postgres",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "portfolio-svc latency summary shows only modest elevation, which does not clearly match the reported slowness",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "postgres request rate stayed flat, so the pool waits are not explained by extra query volume",
+   "evidence_ids": [
+    "E-007"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Onset time and order of the redis hit-ratio drop versus the postgres pool_waiting rise (no time series pulled).",
+  "Why redis evicts keys at about 60% memory.",
+  "Why portfolio-svc latency looks only mildly elevated although the incident reports slowness.",
+  "Why postgres pool waiters grew while postgres rps stayed flat.",
+  "Logs were not examined."
+ ],
+ "actions": [
+  {
+   "text": "Pull time series for redis-cache hit_ratio and evicted_keys and for postgres pool_waiting at 1-minute steps from 14:50 to 15:20 to establish which moved first.",
+   "rationale": "The summaries cannot separate cause from effect between the cache and the database.",
+   "evidence_ids": [
+    "E-001",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check redis-cache logs and config for eviction policy, maxmemory, TTL changes, or key-pattern churn, and check postgres logs for long-running queries or held connections.",
+   "rationale": "Evictions occur at about 60% memory, which suggests a policy or limit issue rather than real memory pressure. Pool waiters need a cause such as slow queries.",
+   "evidence_ids": [
+    "E-002",
+    "E-003",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Verify user-facing latency from web-app and orchestrator, since portfolio-svc's own latency summary looks nearly normal.",
+   "rationale": "The reported slowness does not clearly show in portfolio-svc metrics, so the slow path may be elsewhere.",
+   "evidence_ids": [
+    "E-006"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Consider temporarily raising the postgres pool size or the redis memory and eviction limits once the cause is confirmed.",
+   "rationale": "This would mitigate saturation and cache churn, but it should wait for confirmation to avoid masking the cause.",
+   "evidence_ids": [
+    "E-002",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 14,
+  "tool_attempts": 16,
+  "llm_calls": 5,
+  "tokens_in": 28628,
+  "tokens_out": 8678,
+  "rounds": 0,
+  "elapsed_s": 90.2
+ },
+ "dropped_claims": 0
+}

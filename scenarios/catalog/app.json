@@ -1,0 +1,151 @@
+{
+ "system": "WhatsApp AI banker on AWS (V2)",
+ "services": [
+  {
+   "name": "wa-webhook",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "worker",
+   "purpose": "",
+   "calls": [
+    "redis-session",
+    "llm-gateway",
+    "rds-postgres",
+    "broker-api",
+    "aa-api"
+   ],
+   "metrics": []
+  },
+  {
+   "name": "redis-session",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "llm-gateway",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "rds-postgres",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "broker-api",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "aa-api",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  },
+  {
+   "name": "sender",
+   "purpose": "",
+   "calls": [
+    "whatsapp-api"
+   ],
+   "metrics": []
+  },
+  {
+   "name": "whatsapp-api",
+   "purpose": "",
+   "calls": [],
+   "metrics": []
+  }
+ ],
+ "queues": [
+  {
+   "name": "sqs-inbound",
+   "publisher": "wa-webhook",
+   "consumer": "worker"
+  },
+  {
+   "name": "sqs-outbound",
+   "publisher": "worker",
+   "consumer": "sender"
+  }
+ ],
+ "modules": [
+  {
+   "path": "src/llm.py",
+   "service": "",
+   "doc": "LLM gateway client: a planning call (which tools) and an answer call (prompt + tool results)."
+  },
+  {
+   "path": "src/sender.py",
+   "service": "",
+   "doc": "Sender Lambda (SQS trigger): deliver replies through the WhatsApp Cloud API."
+  },
+  {
+   "path": "src/session.py",
+   "service": "",
+   "doc": "Conversation session in ElastiCache Redis: recent turns and the last portfolio snapshot."
+  },
+  {
+   "path": "src/tools/aa.py",
+   "service": "",
+   "doc": "Account Aggregator tool: refresh linked bank accounts through the AA consent."
+  },
+  {
+   "path": "src/tools/broker.py",
+   "service": "",
+   "doc": "Broker tool: order status from the partner broker's REST API."
+  },
+  {
+   "path": "src/tools/portfolio.py",
+   "service": "",
+   "doc": "Portfolio tool: holdings and value from RDS Postgres."
+  },
+  {
+   "path": "src/webhook.py",
+   "service": "",
+   "doc": "WhatsApp Cloud API webhook (API Gateway -> Lambda): verify, then enqueue to SQS."
+  },
+  {
+   "path": "src/worker.py",
+   "service": "",
+   "doc": "Worker Lambda (SQS trigger): one user message -> session -> LLM with tools -> reply."
+  }
+ ],
+ "tables": [
+  {
+   "name": "holdings",
+   "columns": [
+    "user_id",
+    "symbol",
+    "qty"
+   ]
+  },
+  {
+   "name": "prices",
+   "columns": [
+    "symbol",
+    "last_price",
+    "updated_at"
+   ]
+  }
+ ],
+ "config": {
+  "worker.reserved_concurrency": "6",
+  "worker.timeout_s": "30",
+  "sqs.visibility_timeout_s": "60",
+  "sqs.max_receive_count": "3",
+  "tools.portfolio.timeout_s": "3",
+  "tools.broker.timeout_s": "5",
+  "tools.aa.timeout_s": "10",
+  "session.ttl_s": "300",
+  "llm.model": "\"claude-haiku-4-5\"",
+  "llm.prompt_version": "\"v12\""
+ }
+}

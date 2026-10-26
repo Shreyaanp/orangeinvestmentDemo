@@ -1,0 +1,212 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Late and missing WhatsApp replies come from the outbound path. msg-delivery workers are running out of memory and being killed repeatedly, so outbound-msgs consumers fell from 4 to 2 and its depth grew steadily from about 08:55 to 1281 by 09:30. msg-delivery memory started climbing right after deploy msg-delivery-00277 (08:49, 'batch size increase for delivery receipts'). That deploy is the likely trigger, but I have no direct proof of how it causes the memory growth. inbound-msgs and portfolio-updates are healthy, and the orchestrator and aa-sync deploys do not fit the timing or the symptoms. Unrelated services were not checked in detail.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "msg-delivery is OOM-killed with a memory leak or oversized batches, likely introduced by deploy msg-delivery-00277. Consumer capacity on outbound-msgs halves and the backlog grows, so replies are delayed.",
+   "component": "msg-delivery",
+   "cause_type": "memory_exhaustion_oom_after_deploy",
+   "score": 7.7,
+   "confidence": 0.794,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "msg-delivery deploy with a batch size increase landed at 08:49, just before the memory climb",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "msg-delivery memory pressure began right after the deploy and climbed steadily",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "msg-delivery workers began being OOM-killed at 09:05",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "Messages were redelivered on outbound-msgs after the kills",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "outbound-msgs consumers dropped from 4 to 2 and stayed there",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "outbound-msgs depth started rising at 08:55, before the consumer count dropped, then grew steadily",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "msg-delivery memory peaked at the 99% limit and workers restarted up to 5 times in 5 minutes",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "msg-delivery consumes only from outbound-msgs, so its failure directly backs up that queue",
+     "evidence_ids": [
+      "E-009"
+     ]
+    },
+    {
+     "text": "The larger batch size in msg-delivery-00277 probably causes the memory growth, for example by holding more receipts in memory per batch. This is inferred from timing only.",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The backlog comes from upstream load or another service (orchestrator or inbound path) rather than from msg-delivery.",
+   "component": "orchestrator",
+   "cause_type": "upstream_overload",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "The inbound queue is healthy, so the problem is not upstream of the outbound queue",
+     "evidence_ids": [
+      "E-008"
+     ]
+    },
+    {
+     "text": "outbound-msgs consumers dropped from 4 to 2 and stayed there",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "msg-delivery deploy with a batch size increase landed at 08:49, just before the memory climb",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "msg-delivery memory pressure began right after the deploy and climbed steadily",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "msg-delivery workers began being OOM-killed at 09:05",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Messages were redelivered on outbound-msgs after the kills",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "outbound-msgs consumers dropped from 4 to 2 and stayed there",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "outbound-msgs depth started rising at 08:55, before the consumer count dropped, then grew steadily",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "msg-delivery memory peaked at the 99% limit and workers restarted up to 5 times in 5 minutes",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "The inbound queue is healthy, so the problem is not upstream of the outbound queue",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "msg-delivery consumes only from outbound-msgs, so its failure directly backs up that queue",
+   "evidence_ids": [
+    "E-009"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The larger batch size in msg-delivery-00277 probably causes the memory growth, for example by holding more receipts in memory per batch. This is inferred from timing only.",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Whether the batch size change in msg-delivery-00277 is the actual cause of the memory growth. The evidence is timing only, and a rollback would test it.",
+  "The msg-delivery logs were truncated at 09:08. Later behaviour and any other error types were not reviewed.",
+  "Why some replies never arrive. The DLQ is 0, so loss may come from OOM kills mid-processing or from expiry, and this was not verified.",
+  "Config changes and WhatsApp-side delivery receipts were not examined. Orchestrator, llm-gateway and the other services were not checked individually."
+ ],
+ "actions": [
+  {
+   "text": "Roll back msg-delivery-00277, or revert the delivery-receipt batch size, and restart the msg-delivery workers.",
+   "rationale": "The memory climb starts right after this deploy and drives the OOM kills that halve consumer capacity.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Temporarily scale out msg-delivery consumers on outbound-msgs and raise the memory limit while the rollback proceeds. Watch depth and redeliveries until the backlog drains.",
+   "rationale": "Depth is still growing at about 200 per 5 minutes with only 2 consumers.",
+   "evidence_ids": [
+    "E-005",
+    "E-006",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Profile msg-delivery memory with the new batch size and check whether redelivered messages are duplicated or lost for users.",
+   "rationale": "OOM kills cause redeliveries, and the report says some replies never arrive.",
+   "evidence_ids": [
+    "E-003",
+    "E-004",
+    "E-010"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 9,
+  "tool_attempts": 9,
+  "llm_calls": 3,
+  "tokens_in": 15472,
+  "tokens_out": 3509,
+  "rounds": 0,
+  "elapsed_s": 40.2
+ },
+ "dropped_claims": 0
+}

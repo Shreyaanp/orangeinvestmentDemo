@@ -1,0 +1,247 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Portfolio balances are stale because aa-sync exhausted its connection pool (about 100/100 in use) and now returns HTTP 503 to portfolio-consumer. The portfolio-updates queue is backing up, with depth reaching about 1001 and consume rate falling to about 8.5 against a publish rate of about 41. The earliest deviation is in aa-sync: holdings_snapshot queries slowed progressively from 171ms at 12:50 to 564ms at 12:55, and pool_in_use rose from about 22 to 61 at 12:50 and then to 100 at 12:55. Postgres metrics stayed flat (latency about 8ms, no pool waiting), so the database does not look like the cause. The reason the holdings_snapshot queries slow down, such as a lock, a missing index or a leak in aa-sync, is not established. No deploy, config, migration or flag change touches aa-sync or its dependencies near onset; the only changes were log-level tweaks and a UI copy change.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync exhausted its connection pool because holdings_snapshot queries slowed progressively from 12:50, so connections were held longer. This caused HTTP 503s to portfolio-consumer, stale balances and a backlog on portfolio-updates.",
+   "component": "aa-sync",
+   "cause_type": "connection_pool_exhaustion",
+   "score": 5.733,
+   "confidence": 0.741,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "aa-sync reports connection pool exhaustion starting 12:56",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "portfolio-consumer calls to aa-sync fail with 503, starting before the pool-exhaustion log lines",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "aa-sync pool_in_use jumped from about 22 to 61 at 12:50 and to 100 at 12:55",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "holdings_snapshot queries in aa-sync begin slowing at 12:50",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "holdings_snapshot query latency kept climbing to 564ms by 12:55",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "portfolio-updates queue depth grew to about 1001 while the consumer is the downstream victim",
+     "evidence_ids": [
+      "E-008"
+     ]
+    },
+    {
+     "text": "portfolio-consumer depends on aa-sync (caller to callee), so its errors are effects",
+     "evidence_ids": [
+      "E-010"
+     ]
+    },
+    {
+     "text": "The slow holdings_snapshot queries are holding connections longer, which drives the pool to saturation. The cause of the slowdown is not identified.",
+     "evidence_ids": [
+      "E-011"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "An unidentified aa-sync-side problem, such as lock contention, a missing index, a connection leak or growth of the holdings_snapshot table, is the root of the query slowdown. Postgres itself looks healthy.",
+   "component": "aa-sync",
+   "cause_type": "slow_query_connection_hold",
+   "score": 2.833,
+   "confidence": 0.586,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "holdings_snapshot queries in aa-sync begin slowing at 12:50",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "holdings_snapshot query latency kept climbing to 564ms by 12:55",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Postgres latency stayed flat over the window, which contradicts the database being slow",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "Postgres slow_queries and pool_waiting stayed flat",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "Postgres is degraded and slowing aa-sync queries.",
+   "component": "postgres",
+   "cause_type": "database_slowdown",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "holdings_snapshot queries in aa-sync begin slowing at 12:50",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Postgres latency stayed flat over the window, which contradicts the database being slow",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "Postgres slow_queries and pool_waiting stayed flat",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync reports connection pool exhaustion starting 12:56",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "portfolio-consumer calls to aa-sync fail with 503, starting before the pool-exhaustion log lines",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "aa-sync pool_in_use jumped from about 22 to 61 at 12:50 and to 100 at 12:55",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "holdings_snapshot queries in aa-sync begin slowing at 12:50",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "holdings_snapshot query latency kept climbing to 564ms by 12:55",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Postgres latency stayed flat over the window, which contradicts the database being slow",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "Postgres slow_queries and pool_waiting stayed flat",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "portfolio-updates queue depth grew to about 1001 while the consumer is the downstream victim",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "portfolio-consumer depends on aa-sync (caller to callee), so its errors are effects",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The slow holdings_snapshot queries are holding connections longer, which drives the pool to saturation. The cause of the slowdown is not identified.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Why holdings_snapshot queries began slowing at about 12:50 (data growth, lock contention, a missing index or a connection leak).",
+  "The aa-sync logs for 12:30-12:50 were not examined beyond WARN level, and no aa-sync config or flag changes were found, so the trigger is unknown.",
+  "The 12:51 portfolio-consumer 503s precede the pool-exhausted log lines at 12:56, with pool_in_use already at 61 at 12:50. How aa-sync produced 503s before the pool hit 100 is not explained.",
+  "The error logs were truncated at 50 of 208 matches, so the later timeline was not fully reviewed."
+ ],
+ "actions": [
+  {
+   "text": "Mitigate aa-sync pool saturation: restart or scale out aa-sync instances, and temporarily raise pool_max or add a statement timeout on holdings_snapshot queries to release held connections.",
+   "rationale": "The pool is saturated at 100 and is causing 503s to portfolio-consumer and the backlog on portfolio-updates.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-008"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Inspect the holdings_snapshot query in aa-sync with EXPLAIN, lock waits and long-running transactions to find why latency rose from 171ms to 564ms starting 12:50.",
+   "rationale": "This is the earliest deviation, and Postgres-wide metrics are flat, so the cause is specific to this query or to aa-sync.",
+   "evidence_ids": [
+    "E-004",
+    "E-005",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After aa-sync recovers, watch the portfolio-updates backlog drain and confirm redeliveries and consume_rate return to normal. Add alerts on aa-sync pool_in_use and holdings_snapshot query latency.",
+   "rationale": "The queue depth reached about 1001 and users see stale balances until it drains.",
+   "evidence_ids": [
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 27,
+  "tool_attempts": 27,
+  "llm_calls": 9,
+  "tokens_in": 59361,
+  "tokens_out": 9296,
+  "rounds": 0,
+  "elapsed_s": 272.4
+ },
+ "dropped_claims": 0
+}

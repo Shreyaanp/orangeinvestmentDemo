@@ -1,0 +1,61 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "worker",
+      "cause_type": "code_regression_poison_message",
+      "description": "A worker deploy changed parse_message to read interactive['list_reply']; button replies have no such key, so every interactive message raises KeyError, is retried by SQS three times and lands in the dead-letter queue.",
+      "onset": "2026-10-21T10:33:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "worker",
+          "level": null,
+          "contains": "2af8a26",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-21T10:33:00Z",
+          "end": "2026-10-21T11:30:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "worker",
+          "level": "ERROR",
+          "contains": "KeyError: 'list_reply'",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-21T10:33:00Z",
+          "end": "2026-10-21T11:30:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "sqs-inbound",
+          "level": null,
+          "contains": "",
+          "metric": "dlq_depth",
+          "min_value": 5.0,
+          "failed_tool": false,
+          "start": "2026-10-21T10:33:00Z",
+          "end": "2026-10-21T11:30:00Z"
+        },
+        {
+          "kind": "code",
+          "service": "worker",
+          "level": null,
+          "contains": "src/worker.py",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-21T10:33:00Z",
+          "end": "2026-10-21T11:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "A short LLM latency blip overlaps the deploy; the overall error rate stays low because only ~5% of messages are button taps."
+}

@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "productcatalogservice",
+      "cause_type": "network_packet_loss",
+      "description": "network packet loss injected into productcatalogservice (RE2-OB).",
+      "onset": "2024-01-15T18:20:30Z",
+      "decisive": [
+        {
+          "kind": "metric",
+          "service": "productcatalogservice",
+          "level": null,
+          "contains": "",
+          "metric": "latency-90",
+          "min_value": 0.0052,
+          "start": "2024-01-15T18:20:30Z",
+          "end": "2024-01-15T18:33:30Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "real telemetry (RE2-OB, network packet loss); no change events, no past incidents, per-second data averaged per minute"
+}

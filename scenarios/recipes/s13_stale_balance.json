@@ -1,0 +1,26 @@
+{
+  "id": "s13_stale_balance",
+  "seed": 13,
+  "start": "2026-03-30T11:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 90,
+  "incident_text": "Users say their balances are out of date: trades made more than ten minutes ago do not show up.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "portfolio-svc", "cause_type": "stale_cache_ttl_config", "description": "A configuration change raised portfolio-svc's holdings cache TTL (60s to 1800s), so users see stale cached balances."},
+      "effects": [
+        {"target": "portfolio-svc", "metric": "cache_staleness_s", "op": "set", "value": 1800, "ramp_min": 10, "decisive": true},
+        {"target": "redis-cache", "metric": "hit_ratio", "op": "set", "value": 0.995, "ramp_min": 5}
+      ],
+      "logs": [{"service": "portfolio-svc", "level": "INFO", "msg": "serving holdings from cache, entry age {cache_staleness_s}s", "per_min": 2}],
+      "changes": [{"kind": "config", "service": "portfolio-svc", "ref": "cfg-holdings-cache-ttl", "note": "HOLDINGS_CACHE_TTL_S 60 -> 1800"}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 62,
+      "effects": [{"target": "aa-sync", "metric": "latency_ms", "op": "mul", "value": 1.5, "ramp_min": 5}],
+      "logs": [{"service": "aa-sync", "level": "WARN", "msg": "sync took longer than usual: {latency_ms}ms", "per_min": 1}]
+    }
+  ],
+  "trap": "aa-sync is slightly slow at the same time but that is not why balances are stale"
+}

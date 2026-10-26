@@ -1,0 +1,149 @@
+{
+ "incident_text": "Portfolio pages and syncs are slow or timing out since about 10:40. Connection pool alerts are firing.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 22817,
+  "tokens_out": 7327
+ },
+ "round": 0,
+ "elapsed_s": 130.9645143000089,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "A postgres migration at 10:39 UTC rebuilt the holdings table without recreating its indexes, one minute before the reported onset.",
+   "excerpt": "\"ts\":\"2026-04-06T10:39:00Z\",\"kind\":\"migration\",\"service\":\"postgres\",\"ref\":\"mig-20260406-0042\",\"note\":\"rebuild holdings table; indexes not recreated\"",
+   "source_call_id": "B-12",
+   "service": "postgres",
+   "ts": "2026-04-06T10:39:00Z",
+   "ref": "e1",
+   "id": "E-001",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "postgres connection pool waiters peaked at 45, and the last sample is at that maximum.",
+   "excerpt": "\"metric\":\"pool_waiting\",\"stats\":{\"min\":0.0,\"max\":45.0,\"mean\":15.577,\"last\":45.0,\"missing\":0}",
+   "source_call_id": "B-10",
+   "service": "postgres",
+   "ts": "2026-04-06T11:05:00Z",
+   "ref": "e2",
+   "id": "E-002",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "postgres slow queries rose from about 1 to 60, and the last sample is at that maximum.",
+   "excerpt": "\"metric\":\"slow_queries\",\"stats\":{\"min\":0.962,\"max\":60.0,\"mean\":21.423,\"last\":60.0,\"missing\":0}",
+   "source_call_id": "B-10",
+   "service": "postgres",
+   "ts": "2026-04-06T11:05:00Z",
+   "ref": "e3",
+   "id": "E-003",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "postgres latency rose to a maximum of 84 ms and was still high at the last sample, while error rate and replication lag stayed flat. This points to query slowness, not an outage or replication problem.",
+   "excerpt": "\"metric\":\"latency_ms\",\"stats\":{\"min\":7.354,\"max\":84.188,\"mean\":32.782,\"last\":77.98,\"missing\":0}",
+   "source_call_id": "B-10",
+   "service": "postgres",
+   "ts": "2026-04-06T11:05:00Z",
+   "ref": "e4",
+   "id": "E-004",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "portfolio-svc, aa-sync and order-router all call postgres, so they are callers affected by it and not the origin.",
+   "excerpt": "\"direction\":\"called_by\",\"name\":\"portfolio-svc\",\"weight\":0.8",
+   "source_call_id": "B-13",
+   "service": "postgres",
+   "ts": "2026-04-06T11:05:00Z",
+   "ref": "e5",
+   "id": "E-005",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "portfolio-svc's own metrics over the window are only mildly elevated, with a maximum latency of about 183 ms and error rate up to 0.004. This does not clearly show the reported timeouts.",
+   "excerpt": "\"metric\":\"latency_ms\",\"stats\":{\"min\":110.651,\"max\":182.949,\"mean\":139.528,\"last\":173.562,\"missing\":0}",
+   "source_call_id": "B-11",
+   "service": "portfolio-svc",
+   "ts": "2026-04-06T11:05:00Z",
+   "ref": "e6",
+   "id": "E-006",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "ASSUMPTION",
+   "claim": "Missing indexes on holdings force full scans, which makes queries slow, holds connections longer and exhausts the pool. This is inferred from the migration note and the slow-query and pool metrics, and has not been confirmed in logs or query plans.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": "postgres",
+   "ts": null,
+   "ref": "e7",
+   "id": "E-007",
+   "author": "reasoning",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "Migration mig-20260406-0042 rebuilt the holdings table without recreating its indexes. Holdings queries became slow, held connections longer and exhausted the postgres pool, which slowed portfolio-svc and aa-sync.",
+   "component": "postgres",
+   "cause_type": "missing_indexes_after_migration",
+   "supporting": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-004",
+    "E-005",
+    "E-007"
+   ],
+   "contradicting": [
+    "E-006"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  }
+ },
+ "tasks": {},
+ "challenges": {},
+ "gaps": [],
+ "notes": [
+  "Logs were not queried, so the exact slow queries and any pool exhaustion errors are unconfirmed.",
+  "Time-series points were not pulled, so the onset time of pool_waiting and slow_queries relative to 10:39 is not verified.",
+  "portfolio-svc metrics look only mildly degraded, which conflicts with the reported timeouts. The affected endpoints, aa-sync health and broker-gateway behaviour were not examined.",
+  "Other holdings-table consumers, such as portfolio-consumer and the portfolio-updates queue, were not checked."
+ ],
+ "rejected": []
+}

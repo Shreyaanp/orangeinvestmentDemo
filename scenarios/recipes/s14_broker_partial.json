@@ -1,0 +1,24 @@
+{
+  "id": "s14_broker_partial",
+  "seed": 14,
+  "start": "2026-03-31T09:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Customers see 'order pending' for minutes after placing an order, and some retry. Started around 10:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "broker-gateway", "cause_type": "order_status_endpoint_degraded", "description": "broker-gateway's order-status endpoint was degraded (slow), so order confirmations arrive late; order-router errors and retries are a consequence."},
+      "effects": [
+        {"target": "broker-gateway", "metric": "latency_ms", "op": "mul", "value": 3, "ramp_min": 4},
+        {"target": "broker-gateway", "metric": "err_rate", "op": "add", "value": 0.1, "ramp_min": 4}
+      ],
+      "logs": [{"service": "broker-gateway", "level": "WARN", "msg": "order status endpoint slow: GET /orders/status took {latency_ms}ms", "per_min": 4}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 50,
+      "changes": [{"kind": "deploy", "service": "order-router", "ref": "order-router-00455", "note": "log level tweak"}]
+    }
+  ],
+  "trap": "errors surface in order-router (an effect), while the degraded dependency is broker-gateway"
+}

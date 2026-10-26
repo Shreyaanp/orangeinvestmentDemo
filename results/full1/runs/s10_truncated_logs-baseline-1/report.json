@@ -1,0 +1,177 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "New-customer signup and KYC are failing because auth-kyc cannot open TCP connections to the external KYC vendor (kyc-provider). Its logs show 'connection refused' from 09:55:40Z, matching the reported onset of about 09:55. auth-kyc err_rate reached 0.604 (last 0.603) while rps stayed flat at about 15, so the failures are not load-driven. The only change in the window is a postgres 'metrics label rename' deploy at 09:13, which is unrelated and 40 minutes before onset. I could not tell from this data whether the vendor is down or whether egress, DNS or the endpoint from our side is broken. I also did not check the onset point on the metric series or the other services' logs.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "auth-kyc cannot connect to the external KYC vendor (kyc-provider) because the vendor is down or refusing connections, which blocks KYC and signup.",
+   "component": "auth-kyc",
+   "cause_type": "external_dependency_connection_refused",
+   "score": 3.35,
+   "confidence": 0.626,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "auth-kyc logs connection refused to the KYC vendor, first at 09:55:40Z (the query window began 09:40, so this is the first error in it)",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "The same error repeats continuously, still occurring at 10:15:37Z (log result truncated, 37 total matches)",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "auth-kyc error rate is very high (max 0.604, last 0.603, min 0.002) while rps stays flat, so it is not a load surge",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "rps is stable, ruling out a traffic surge",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "kyc-provider is an external vendor endpoint outside our service list, so the refusal could come from the vendor being down or from our egress, DNS or endpoint configuration. This data cannot separate them.",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A network, egress or endpoint-configuration problem on our side to kyc-provider causes the refusals. No change was found that explains it, so this is unconfirmed.",
+   "component": "auth-kyc",
+   "cause_type": "egress_or_endpoint_misconfiguration",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "auth-kyc logs connection refused to the KYC vendor, first at 09:55:40Z (the query window began 09:40, so this is the first error in it)",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "kyc-provider is an external vendor endpoint outside our service list, so the refusal could come from the vendor being down or from our egress, DNS or endpoint configuration. This data cannot separate them.",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The only change in the window is an unrelated postgres metrics-label deploy at 09:13, about 40 minutes before onset",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "auth-kyc logs connection refused to the KYC vendor, first at 09:55:40Z (the query window began 09:40, so this is the first error in it)",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "The same error repeats continuously, still occurring at 10:15:37Z (log result truncated, 37 total matches)",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "auth-kyc error rate is very high (max 0.604, last 0.603, min 0.002) while rps stays flat, so it is not a load surge",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "rps is stable, ruling out a traffic surge",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "The only change in the window is an unrelated postgres metrics-label deploy at 09:13, about 40 minutes before onset",
+   "evidence_ids": [
+    "E-005"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "kyc-provider is an external vendor endpoint outside our service list, so the refusal could come from the vendor being down or from our egress, DNS or endpoint configuration. This data cannot separate them.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Whether kyc-provider is down or our egress, DNS or endpoint config to it is broken.",
+  "The exact onset on the err_rate time series; only summary stats were retrieved.",
+  "Whether orchestrator, wa-webhook or other services show downstream effects; their logs were not checked.",
+  "The log results were truncated (37 matches, 30 shown), so the full error pattern after 10:15 is unseen."
+ ],
+ "actions": [
+  {
+   "text": "Check the KYC vendor's status page and escalate to the vendor, and test TCP connectivity to kyc-provider from an auth-kyc host.",
+   "rationale": "This separates a vendor outage from a problem on our side, and the logs show connection refused from 09:55:40Z.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Show users a clear 'KYC temporarily unavailable' message and queue or retry signups, or fail over to a backup KYC provider if one exists.",
+   "rationale": "The error rate is about 60% and the failure is ongoing, so customers are blocked.",
+   "evidence_ids": [
+    "E-003",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check auth-kyc configuration for the vendor endpoint and any network, firewall or DNS changes outside this change feed.",
+   "rationale": "No tracked change explains the onset; the only change in the window (postgres 09:13) is unrelated.",
+   "evidence_ids": [
+    "E-005",
+    "E-007"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add an alert on auth-kyc vendor connection failures and a circuit breaker with a fallback.",
+   "rationale": "The error rate was high for 25+ minutes before it was reported.",
+   "evidence_ids": [
+    "E-003",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 12,
+  "tool_attempts": 12,
+  "llm_calls": 5,
+  "tokens_in": 29771,
+  "tokens_out": 7916,
+  "rounds": 0,
+  "elapsed_s": 83.5
+ },
+ "dropped_claims": 0
+}

@@ -1,0 +1,28 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "llm-gateway",
+      "cause_type": "provider_latency",
+      "description": "The LLM provider became about 3x slower; with the gateway's telemetry export broken and worker traces off, it cannot be told apart from the prompt-history deploy a minute earlier.",
+      "onset": "2026-10-24T09:40:00Z",
+      "decisive": [
+        {
+          "kind": "metric",
+          "service": "llm-gateway",
+          "level": null,
+          "contains": "",
+          "metric": "latency_ms",
+          "min_value": 2000.0,
+          "failed_tool": false,
+          "start": "2026-10-24T09:40:00Z",
+          "end": "2026-10-24T10:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": false,
+  "expected_status": "INCONCLUSIVE",
+  "trap": "Worker duration rises right after a deploy that makes prompts longer; the gateway's metrics and logs and the worker's traces are missing, so provider slowness and the deploy cannot be separated. INCONCLUSIVE is correct."
+}

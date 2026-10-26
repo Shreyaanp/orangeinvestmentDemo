@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "broker-gateway",
+      "cause_type": "upstream_rate_limit",
+      "description": "The external broker API rate-limited broker-gateway (HTTP 429), so broker calls failed. The orchestrator host's skewed clock made its errors look like they came first.",
+      "onset": "2026-03-19T12:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "broker-gateway",
+          "level": "ERROR",
+          "contains": "broker api returned 429 too many requests, retry-after 30s",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-19T12:00:00Z",
+          "end": "2026-03-19T13:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "orchestrator host clock is 5 minutes behind, so its errors appear to precede the real cause"
+}

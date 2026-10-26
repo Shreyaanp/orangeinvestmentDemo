@@ -1,0 +1,451 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most probable root cause is migration mig-20260406-0042, applied to postgres at 10:39, which rebuilt the holdings table without recreating its indexes. Holdings queries began logging slow seq scans at 10:40:22 and postgres slow_queries and pool_waiting rose at 10:40. aa-sync pool_in_use then climbed from 10:42 to saturation at 10:49, and portfolio-svc latency rose from 10:40 with upstream timeouts from 10:46. portfolio-consumer lag (from 10:44) looks like a downstream effect. This is the best-supported explanation, but index state and query plans were never directly observed, and the latency rise looks modest next to the reported timeouts, so other contributors are possible.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "Migration mig-20260406-0042 rebuilt the postgres holdings table without recreating indexes, so holdings queries fall back to seq scans, slow down, hold connections longer, and exhaust aa-sync's pool and cause portfolio-svc timeouts, with portfolio-consumer lagging as a downstream effect.",
+   "component": "postgres",
+   "cause_type": "schema_migration_missing_indexes",
+   "score": 7.625,
+   "confidence": 0.792,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "The migration rebuilt holdings without recreating indexes at 10:39, one minute before onset, and it was the only change returned for any service in the 08:00-10:45 window.",
+     "evidence_ids": [
+      "E-023",
+      "E-024"
+     ]
+    },
+    {
+     "text": "Postgres-side signals depart at 10:40: slow_queries rose from about 1 to 10.8 and pool_waiting from 0 to 7.5. These are postgres measurements, so they do not depend on aa-sync's clock. The first holdings seq-scan warning is at 10:40:22, with no holdings slow-query lines before the onset window.",
+     "evidence_ids": [
+      "E-050",
+      "E-051",
+      "E-072",
+      "E-083"
+     ]
+    },
+    {
+     "text": "Seq-scan durations on holdings grew steadily after onset, from 20 ms up to 80 ms by 10:49.",
+     "evidence_ids": [
+      "E-073",
+      "E-082"
+     ]
+    },
+    {
+     "text": "The shared-database call graph fits the observed impact: portfolio-svc (0.8), aa-sync (0.7) and order-router (0.3) all call postgres synchronously, so the migration's effects would reach all of them.",
+     "evidence_ids": [
+      "E-037"
+     ]
+    },
+    {
+     "text": "The aa-sync pool grew from 22 to 100 with flat request rate, which fits connections being held longer as queries slow, not extra load. It is likely that this is the mechanism, though retries counted inside rps cannot be fully excluded.",
+     "evidence_ids": [
+      "E-056",
+      "E-057",
+      "E-064"
+     ]
+    },
+    {
+     "text": "The aa-sync logs for 10:35-10:45 show no errors, timeouts or escalating warnings, and the first postgres timeout in aa-sync appears only at 10:45:36, after postgres slowness began. This is consistent with aa-sync being a victim of the slow postgres, not the origin.",
+     "evidence_ids": [
+      "E-062",
+      "E-012"
+     ]
+    },
+    {
+     "text": "portfolio-consumer latency breaches its band only at 10:44, after portfolio-svc. It is likely a downstream symptom via its dependence on aa-sync.",
+     "evidence_ids": [
+      "E-092",
+      "E-095"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The latency rise is modest (portfolio-svc up roughly 20-70 ms, logged seq scans 20-80 ms), which is hard to reconcile with page timeouts and full pool exhaustion. It is possible that other contributors exist; this is unverified.",
+     "evidence_ids": [
+      "E-076"
+     ]
+    },
+    {
+     "text": "Index state was never observed. There are no EXPLAIN plans, no index list, and the 'index' log searches returned nothing, which says nothing about actual index state. The seq-scan link to the migration is therefore inferred.",
+     "evidence_ids": [
+      "E-074",
+      "E-084",
+      "E-086"
+     ]
+    },
+    {
+     "text": "Seq-scan durations could also reflect table growth or lock contention, and these alternatives cannot be separated with this data.",
+     "evidence_ids": [
+      "E-077"
+     ]
+    },
+    {
+     "text": "Ordering at the 10:40 minute is not firm. Postgres and portfolio-svc onsets fall in the same bucket, the 10:40 vs 10:42 ordering with aa-sync assumes host clocks agree, and clock skew was not checked.",
+     "evidence_ids": [
+      "E-053",
+      "E-075",
+      "E-094"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "aa-sync itself is the origin: a leak or hidden retry loop holds connections and exhausts its own pool, which then queues on the shared postgres and slows portfolio-svc.",
+   "component": "aa-sync",
+   "cause_type": "connection_pool_exhaustion_self_inflicted",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The only support is that aa-sync's pool_max fluctuated (about 96-103), so its effective limit was not constant. That is a metric anomaly and does not show a leak or retry loop.",
+     "evidence_ids": [
+      "E-060"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "aa-sync request rate was flat through onset and saturation, so there was no load surge driving its pool up.",
+     "evidence_ids": [
+      "E-056",
+      "E-057"
+     ]
+    },
+    {
+     "text": "Postgres slow_queries and pool_waiting departed at 10:40, before aa-sync pool_in_use first rose at 10:42.",
+     "evidence_ids": [
+      "E-050",
+      "E-051"
+     ]
+    },
+    {
+     "text": "aa-sync logs before 10:45 show no errors, timeouts or repeated retry patterns, and no retry metric supports retry amplification.",
+     "evidence_ids": [
+      "E-062",
+      "E-065"
+     ]
+    },
+    {
+     "text": "CPU throttling stayed low and flat, ruling out a resource-starvation explanation inside aa-sync.",
+     "evidence_ids": [
+      "E-061"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync first logged an upstream postgres timeout at 10:45:36Z, about 5 minutes after postgres slow queries began.",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "Migration mig-20260406-0042 on postgres rebuilt the holdings table and did not recreate indexes, at 10:39 UTC, one minute before reported onset.",
+   "evidence_ids": [
+    "E-023"
+   ]
+  },
+  {
+   "text": "The same migration appears in the wider 08:00-10:45 window, and it is the only change returned for any service in that window.",
+   "evidence_ids": [
+    "E-024"
+   ]
+  },
+  {
+   "text": "postgres is called by portfolio-svc (0.8), aa-sync (0.7) and order-router (0.3). All three share the same database, so the migration's effects would reach all three.",
+   "evidence_ids": [
+    "E-037"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting is 0.0 through 10:39 and first departs at 10:40 (7.5), reaching 45.0 by 10:45.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "postgres slow_queries is at baseline (about 1.0) through 10:39, then first departs at 10:40 (10.808) and reaches 60.0 by 10:45. This is a postgres-side measurement, so its onset does not depend on aa-sync's host clock.",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "aa-sync rps stayed in a narrow band with no surge across 10:00–10:59 (min 32.151, max 38.226, mean 35.07). The 10:40 bucket is 34.27, which is not elevated.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "pool_in_use was flat around 22 until 10:41 and first rose clearly at 10:42, while rps did not rise (36.22 at 10:41, 34.229 at 10:42).",
+   "evidence_ids": [
+    "E-057"
+   ]
+  },
+  {
+   "text": "pool_max varied over the window (min 95.814, max 103.431), so the effective pool limit was not constant. This is consistent with the 100/103 and 100/101 log counts in E-013.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "cpu_throttle_pct and err_rate stayed low and narrow across 10:00–11:00, which weakens CPU throttling or an error surge as the driver.",
+   "evidence_ids": [
+    "E-061"
+   ]
+  },
+  {
+   "text": "aa-sync logs for 10:35–10:45 contain 13 lines, none at ERROR level and none mentioning timeouts or pool exhaustion. The result was not truncated. The last line is at 10:44:50.",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "The first postgres slow sequential scan on holdings in the 10:20-10:45 window is at 10:40:22, 20 ms. No earlier holdings slow-scan line appears in that window. This only covers warnings the service logs, so it cannot show whether queries were index scans before 10:39.",
+   "evidence_ids": [
+    "E-072"
+   ]
+  },
+  {
+   "text": "Logged holdings seq-scan durations grew from 20 ms to 63 ms between 10:40 and 10:44. 30 lines were returned, not truncated.",
+   "evidence_ids": [
+    "E-073"
+   ]
+  },
+  {
+   "text": "A postgres log search for 'index' over 10:00-11:00 returned no lines. This does not show the index state, and it does not show whether index problems were logged.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "Holdings seq-scan durations rose step by step to 80ms by 10:49:56Z. The holdings-filtered log for 10:30-10:50 returned 60 lines, not truncated.",
+   "evidence_ids": [
+    "E-082"
+   ]
+  },
+  {
+   "text": "No postgres log lines mentioning holdings were returned for 09:40-10:30, so there are no holdings slow-query records before the onset window.",
+   "evidence_ids": [
+    "E-083"
+   ]
+  },
+  {
+   "text": "A search for 'index' in postgres logs from 09:40 to 10:45 returned no lines, so no index-scan or plan records exist in the logs.",
+   "evidence_ids": [
+    "E-084"
+   ]
+  },
+  {
+   "text": "portfolio-consumer latency_ms first sustained breach is at 10:44 (167.654 ms), then rises to 191.291 ms by 10:47.",
+   "evidence_ids": [
+    "E-092"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The postgres metrics depart about 2 minutes before aa-sync pool_in_use. The 10:40 vs 10:42 ordering may be real, but it is only accurate to one bucket and assumes the metric pipeline's timestamps agree across hosts. Clock skew was not checked.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "The pool growth from 22 to 100 is more consistent with connections being held longer as query latency rises than with extra request volume. The request rate was flat while latency rose about 57% (about 90 to 141 ms). The metrics cannot separate this from retry traffic, because retries may be counted inside rps.",
+   "evidence_ids": [
+    "E-064"
+   ]
+  },
+  {
+   "text": "Retry amplification is not supported by the data available. There is no retry metric, and the logs show no repeated retry or timeout lines before 10:45:36, the first upstream postgres timeout noted in E-012.",
+   "evidence_ids": [
+    "E-065"
+   ]
+  },
+  {
+   "text": "Onset ordering is consistent with postgres holdings seq scans (10:40:22) leading portfolio-svc latency (10:40 bucket) and portfolio-consumer latency (10:44 bucket). At one-minute resolution and with possible clock skew, the 10:40 ordering between postgres and portfolio-svc is not firm.",
+   "evidence_ids": [
+    "E-075"
+   ]
+  },
+  {
+   "text": "The latency rise is modest: portfolio-svc increases by roughly 20-70 ms and the logged seq scans take 20-63 ms each. That is hard to reconcile with the reported page timeouts and pool exhaustion, so other contributors may exist. Not verified.",
+   "evidence_ids": [
+    "E-076"
+   ]
+  },
+  {
+   "text": "The rising seq-scan durations may reflect growth of the holdings table, lock contention, or a missing index after the 10:39 migration. These are alternatives and cannot be separated with this data.",
+   "evidence_ids": [
+    "E-077"
+   ]
+  },
+  {
+   "text": "The holdings seq scans that begin at 10:40:22 are consistent with the 10:39 migration that rebuilt holdings without recreating indexes (E-023), with the migration one minute before the first slow scan. Plans were not observed, so this is not confirmed.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "Latency degradation starts in portfolio-svc before consumer lag and before portfolio-svc's first logged postgres timeout (10:46:00Z, E-015). This is consistent with postgres being the slow callee, but the 10:40 bucket may include or precede the 10:40:22 postgres onset, depending on the bucket convention, which is not stated.",
+   "evidence_ids": [
+    "E-094"
+   ]
+  },
+  {
+   "text": "portfolio-consumer lags portfolio-svc by about 4 minutes. This fits its dependence on aa-sync (E-036), which itself timed out on postgres from 10:45:36Z (E-012), so the consumer is probably a downstream symptom and not an independent origin.",
+   "evidence_ids": [
+    "E-095"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Index state, query plans and EXPLAIN output for holdings were never retrieved, so the missing-index mechanism is inferred from the migration note and seq-scan warnings.",
+  "Host clock skew was not checked, and the 1-minute bucket convention is unstated, so ordering at 10:40 between postgres and portfolio-svc is not firm.",
+  "The modest latency increase versus the reported timeouts is unexplained, so another contributor is possible.",
+  "Postgres active connections, lock metrics and latency timelines were unavailable, and slow_queries plateaus at exactly 60.0, which may be a cap.",
+  "portfolio-updates queue depth and rabbitmq queue-level metrics were not retrieved, so consumer backlog is unverified.",
+  "Postgres and aa-sync log results are truncated (373 and 270 matches, 100 returned each), so later events are not covered.",
+  "Pool alert firing time was not retrieved, and the pool_max fluctuation and over-limit connection counts (100/103) are unexplained.",
+  "Upstream services (broker-gateway, market-data), redis hit_ratio anomaly (max above 1.0) and infrastructure or cron changes were not checked. Past incident INC-0412 (Redis stampede) is only a weak hint with no supporting evidence here.",
+  "No pool alert firing time was retrieved. It needs a log query on the alerting or pool services, which I did not run.",
+  "No timeline was retrieved for portfolio-svc or portfolio-consumer latency, error rate or rps, so their onset relative to aa-sync and postgres is unknown.",
+  "Postgres active connections, lock wait and slow-query time series were not retrieved. Only the summary for slow_queries is known.",
+  "No p50/p95/p99 latency for portfolio page requests or aa-sync sync durations was retrieved.",
+  "No previous-day comparison for 10:00-11:30 was run, so the baseline is inferred from the 09:40-10:35 window only.",
+  "Log evidence was not queried. The budget of about 5 calls was used on metrics discovery and point retrieval.",
+  "The metric pool_in_use is at 5-minute step size, so sub-5-minute ordering between aa-sync and postgres cannot be determined.",
+  "portfolio-updates, inbound-msgs and outbound-msgs queue metrics (depth, publish/consume rate, consumers, unacked, redeliveries, DLQ) were not retrieved. The rabbitmq summary has no queue-level metrics, so backlog growth is unverified.",
+  "portfolio-consumer was not queried for logs or metrics.",
+  "No rabbitmq or redis-cache log lines were queried.",
+  "No time-series points were requested, so the onset of the redis hit_ratio dip and rabbitmq latency changes around 10:40 cannot be located. The hit_ratio max above 1.0 is unexplained.",
+  "postgres WARN results are truncated (373 total, 100 returned, ending 10:55:53Z). aa-sync results are truncated (270 total, 100 returned, ending 11:07:33Z). Later postgres and aa-sync events are not covered.",
+  "broker-gateway and market-data latency were not checked, so upstream slowness cannot be separated from internal contention.",
+  "No postgres pool or connection metrics were queried. The pool-size inconsistencies (for example 100/103) cannot be explained from logs alone.",
+  "Host clock skew was not checked. The ordering of postgres before aa-sync and portfolio-svc relies on log timestamps.",
+  "get_changes returns only deploy, config, migration and flag kinds. Infrastructure or scaling changes for postgres, redis-cache and rabbitmq, and scheduled-job or cron changes, were not covered by a dedicated query and could not be ruled in or out.",
+  "No config changes to connection pool sizes, timeouts, retry settings or cache TTLs appeared in the window. Because the window covers 08:00-10:45 and the tool returned no partial or truncated results, this is a negative result, but it is not proof that none exist.",
+  "Service-filtered queries were run only for postgres. Changes to wa-webhook, orchestrator, portfolio-svc, aa-sync and other services are covered only by the unfiltered queries.",
+  "get_dependencies was run only for postgres. Its queue edges (portfolio-updates, if any) and the downstream effects on portfolio-consumer and redis-cache were not checked.",
+  "No past incidents were searched. Historical matches for index-less table rebuilds were not checked.",
+  "broker-gateway and market-data were not queried, so their edges to the portfolio services are unknown.",
+  "get_dependencies('rabbitmq') returned zero items, which may mean no recorded edges rather than no links. The inbound-msgs and outbound-msgs queues were not queried.",
+  "The pgbouncer or pool configuration and the per-service pool sizes were not available from these tools.",
+  "get_dependencies was not run on redis-cache, portfolio-consumer or order-router, so their own edges are only partly known.",
+  "This was my fifth call, one over the budget of about four. It was a single extra call, and the earlier calls had already returned the topology I needed.",
+  "Each search returned at most one item (INC-0412) or none, so the past-incident record for these symptoms looks sparse or the keyword search is weak. Absence of precedent is not proof that no similar incident occurred.",
+  "The search results carry no source or URL (both null), and INC-0412 has no time of day, so the 10:40 UTC onset pattern and any recurring time-of-day pattern could not be checked.",
+  "No past incident record mentions change type (deploy, config, migration or flag), so the hint about non-deploy changes could not be tested from these results.",
+  "Budget was limited to 4 search calls, so I did not try alternative phrasings such as 'portfolio timeout' or 'sync latency' that might surface other incidents.",
+  "INC-0412 is a past incident and is treated only as a hypothesis to test against this incident's data, not as evidence of its cause.",
+  "aa-sync logs for 10:30-10:40 were not retrieved, so it is unknown whether any pool errors or timeouts appeared before 10:40. The call budget was used on metrics and the postgres seq-scan search.",
+  "postgres active_connections and any lock metrics are unavailable (unknown metric), so the clock-independent connection and lock cross-check the task asked for could not be done.",
+  "No 10-second resolution data was requested or returned. The 1-minute step cannot separate events within a minute, such as the seq-scan start at 10:40:22.",
+  "postgres query duration is not a metric here; slow_queries is a count, so it is only a proxy for query duration.",
+  "Clock skew between postgres and aa-sync hosts was not checked, so the ordering of the 10:40 and 10:42 departures is not confirmed.",
+  "The postgres WARN 'seq' search used end=10:40:00, so it does not cover the 10:40:00-10:40:22 interval or any non-'seq' pool warnings.",
+  "No retry-count or sync-job-start metric exists for aa-sync (metric list: cpu_throttle_pct, err_rate, latency_ms, pool_in_use, pool_max, rps), so sync job starts and retry counts could not be measured.",
+  "aa-sync logs were pulled only for 10:35–10:45. The 10:00–10:35 and 10:45–11:00 windows were not checked for sync-job starts or retry lines.",
+  "latency_ms is an aggregate with no percentile or per-request breakdown, so per-request duration distribution cannot be verified.",
+  "Unknown whether rps counts retried requests. If it does not, a retry loop could raise pool usage without showing in rps.",
+  "No aa-sync log line at 10:40:22 exists. The nearest is 10:40:31 'normalized records published', so the task's 10:40:22 reference point could not be checked directly.",
+  "No postgres query-latency or pool-wait series was pulled in this task, so the link between aa-sync latency and postgres slowness is not measured here.",
+  "pool_max fluctuation (95.8–103.4) is not explained by any returned data. The cause of the inconsistent pool counts (E-013) remains unresolved.",
+  "Current index list on holdings, EXPLAIN output, and pg_stat_user_tables/indexes data were not retrievable with query_logs and query_metrics. The 'index' log search returned 0 lines (T8-04), which says nothing about actual index state.",
+  "No logs of index scans before 10:39 exist in the returned data. Postgres apparently logs only slow queries, so fast index scans are invisible. Pre-migration plan behavior cannot be confirmed.",
+  "Postgres metric timelines (slow_queries, pool_waiting, latency) were not pulled in this task, so the postgres-side onset cannot be lined up minute-by-minute with portfolio-svc.",
+  "portfolio-consumer range differs between sources: E-008 gives 141.305-195.948 ms, while T8-03 over 10:30-11:00 gives 142.91-194.425 ms. The E-008 window was probably wider; this was not reconciled.",
+  "Call budget was used up (5 calls), so holdings log data after 10:45 and portfolio-svc WARN timeline were not re-queried in this task. Clock skew between hosts was not checked.",
+  "No EXPLAIN plans or pg_stat_statements were pulled, so seq scan versus index scan cannot be confirmed before 10:39 or after 10:40. The task question stays partly unanswered.",
+  "The logs do not record plans for fast queries, so the absence of 'index' lines (T9-04) and of holdings lines before 10:30 (T9-06) does not prove index scans happened earlier. Only the slow-query log shows seq scans.",
+  "The 10:30-10:40 window was covered only by the holdings-filtered query (T9-03). Non-holdings or fast-path queries in that window were not checked.",
+  "slow_queries plateaus at exactly 60.0 from 10:45, which may be a metric cap or a counting limit rather than a true level. This was not verified.",
+  "Metrics are at 1-minute steps for slow_queries and pool_waiting but only a summary for latency_ms, so the slowdown onset for postgres latency is still unplaced.",
+  "Host clock skew was not checked, so ordering between postgres and the aa-sync/portfolio-svc timeouts relies on log timestamps alone.",
+  "The 373-match / truncated postgres result cited in E-011 uses a different filter and window. It is not reconciled with the 60-line holdings result from T9-03.",
+  "portfolio-consumer err_rate timeline was not requested. Only its summary is known (max 0.005), so its onset cannot be checked.",
+  "The 1-minute bucket convention (start-labelled or end-labelled) is not stated, so the 10:40 bucket cannot be placed exactly against the 10:40:22 postgres onset.",
+  "No per-minute series were requested for portfolio-svc rps or any pool or connection metric on portfolio-svc, so throughput change and pool wait at onset are unverified.",
+  "Latency is a mean and cannot show whether specific requests are timing out, so the timeout claims rest on the logs rather than these metrics.",
+  "Clock skew between hosts was not checked, so the cross-service ordering is based on the timestamps alone."
+ ],
+ "actions": [
+  {
+   "text": "Verify the index state on postgres holdings (index list, EXPLAIN on the portfolio and sync queries). If indexes are missing, recreate them, for example with CREATE INDEX CONCURRENTLY, to avoid blocking writes.",
+   "rationale": "The migration rebuilt holdings without indexes and holdings seq scans began 40 seconds after it, so restoring the indexes is the most direct fix. Confirm with plans first because index state was never observed.",
+   "evidence_ids": [
+    "E-023",
+    "E-072",
+    "E-086"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Alternatively, if recreating indexes is slow or risky, roll back or revert migration mig-20260406-0042 per the migration owner's procedure.",
+   "rationale": "It is the only change in the window and is the leading candidate origin.",
+   "evidence_ids": [
+    "E-024",
+    "E-030"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After the fix, watch postgres slow_queries and pool_waiting, aa-sync pool_in_use, and portfolio-svc and portfolio-consumer latency for recovery. If pool_in_use stays at its ceiling, consider draining or restarting aa-sync connections.",
+   "rationale": "Recovery of the postgres signals should be followed by the dependent services. The aa-sync pool sat at its ceiling from 10:49.",
+   "evidence_ids": [
+    "E-049",
+    "E-051",
+    "E-059"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Add a migration check that confirms indexes exist after table rebuilds, and alert on postgres slow_queries and seq scans on large tables.",
+   "rationale": "The migration silently dropped indexes, and slow queries were visible within a minute of it.",
+   "evidence_ids": [
+    "E-023",
+    "E-051"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Check clock skew between hosts and pull postgres lock and active-connection data and EXPLAIN or pg_stat_statements output, to confirm ordering and rule out lock contention or table growth.",
+   "rationale": "The ordering rests on timestamps and the seq-scan cause is unconfirmed.",
+   "evidence_ids": [
+    "E-053",
+    "E-077"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Investigate the aa-sync pool_max fluctuation and the log lines reporting more connections in use than the limit (such as 100/103).",
+   "rationale": "This inconsistency is unexplained and may hide a pool configuration issue.",
+   "evidence_ids": [
+    "E-013",
+    "E-060"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 50,
+  "tool_attempts": 50,
+  "llm_calls": 35,
+  "tokens_in": 284145,
+  "tokens_out": 64828,
+  "rounds": 2,
+  "elapsed_s": 393.0
+ },
+ "dropped_claims": 0
+}

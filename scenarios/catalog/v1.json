@@ -1,0 +1,213 @@
+{
+ "system": "Orange-Invest-like stack (V1)",
+ "services": [
+  {
+   "name": "wa-webhook",
+   "purpose": "normal activity: webhook received from whatsapp cloud api; message enqueued to inbound-msgs",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "orchestrator",
+   "purpose": "normal activity: session step completed; tool call dispatched for session",
+   "calls": [
+    "llm-gateway",
+    "portfolio-svc",
+    "broker-gateway",
+    "market-data",
+    "auth-kyc",
+    "redis-cache"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "active_sessions"
+   ]
+  },
+  {
+   "name": "llm-gateway",
+   "purpose": "normal activity: completion ok model=primary; completion ok request",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "tokens_per_min",
+    "fallback_pct",
+    "parse_fail_pct"
+   ]
+  },
+  {
+   "name": "portfolio-svc",
+   "purpose": "normal activity: holdings fetched for user",
+   "calls": [
+    "postgres",
+    "redis-cache"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "aa-sync",
+   "purpose": "normal activity: aa fetch completed for consent; normalized records published to portfolio-updates",
+   "calls": [
+    "postgres"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "pool_in_use",
+    "pool_max",
+    "cpu_throttle_pct"
+   ]
+  },
+  {
+   "name": "broker-gateway",
+   "purpose": "normal activity: broker order status ok; broker holdings sync ok",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "rate_limit_remaining"
+   ]
+  },
+  {
+   "name": "order-router",
+   "purpose": "normal activity: order accepted; order routed to broker",
+   "calls": [
+    "broker-gateway",
+    "postgres"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "market-data",
+   "purpose": "normal activity: price tick batch published; feed heartbeat ok",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "price_age_s"
+   ]
+  },
+  {
+   "name": "auth-kyc",
+   "purpose": "normal activity: kyc status check ok for user",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "portfolio-consumer",
+   "purpose": "normal activity: processed portfolio update",
+   "calls": [
+    "aa-sync"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "msg-delivery",
+   "purpose": "normal activity: whatsapp send ok id; delivery receipt: delivered",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "memory_pct",
+    "restarts_5m"
+   ]
+  },
+  {
+   "name": "web-app",
+   "purpose": "normal activity: page render ok",
+   "calls": [
+    "portfolio-svc",
+    "order-router"
+   ],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate"
+   ]
+  },
+  {
+   "name": "redis-cache",
+   "purpose": "",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "hit_ratio",
+    "memory_pct",
+    "evicted_keys"
+   ]
+  },
+  {
+   "name": "postgres",
+   "purpose": "normal activity: checkpoint complete",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "pool_waiting",
+    "slow_queries",
+    "replication_lag_s"
+   ]
+  },
+  {
+   "name": "rabbitmq",
+   "purpose": "normal activity: connection accepted; channel opened",
+   "calls": [],
+   "metrics": [
+    "rps",
+    "latency_ms",
+    "err_rate",
+    "memory_pct"
+   ]
+  }
+ ],
+ "queues": [
+  {
+   "name": "inbound-msgs",
+   "publisher": "wa-webhook",
+   "consumer": "orchestrator"
+  },
+  {
+   "name": "outbound-msgs",
+   "publisher": "orchestrator",
+   "consumer": "msg-delivery"
+  },
+  {
+   "name": "portfolio-updates",
+   "publisher": "aa-sync",
+   "consumer": "portfolio-consumer"
+  }
+ ],
+ "modules": [],
+ "tables": [],
+ "config": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "s12_two_causes",
+  "seed": 12,
+  "start": "2026-03-27T10:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 100,
+  "incident_text": "The assistant is slow, the token-cost alert fired, and some users received blank notifications.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 55,
+      "truth": {"component": "orchestrator", "cause_type": "runaway_agent_loop", "description": "A runaway agent loop in the orchestrator repeated tool calls (for example 38 identical get_holdings calls in one session), spiking llm-gateway token use and latency."},
+      "effects": [
+        {"target": "llm-gateway", "metric": "tokens_per_min", "op": "set", "value": 400000, "ramp_min": 6, "decisive": true},
+        {"target": "llm-gateway", "metric": "latency_ms", "op": "mul", "value": 1.8, "ramp_min": 6},
+        {"target": "orchestrator", "metric": "latency_ms", "op": "mul", "value": 1.5, "ramp_min": 6}
+      ],
+      "logs": [
+        {"service": "orchestrator", "level": "ERROR", "msg": "agent loop detected: repeated tool call get_holdings x38 in one session, aborting", "per_min": 3},
+        {"service": "llm-gateway", "level": "WARN", "msg": "token usage {tokens_per_min} tokens/min exceeds alert threshold", "per_min": 1, "decisive": false}
+      ]
+    },
+    {
+      "id": "F2", "role": "secondary", "at_min": 85,
+      "truth": {"component": "msg-delivery", "cause_type": "notification_template_bug", "description": "A msg-delivery release (notification template refactor) fails to render notifications (missing variable portfolio_value), producing blank notifications."},
+      "effects": [{"target": "msg-delivery", "metric": "err_rate", "op": "add", "value": 0.08, "ramp_min": 1}],
+      "logs": [{"service": "msg-delivery", "level": "ERROR", "msg": "template render failed: missing variable 'portfolio_value'", "per_min": 3}, {"service": "msg-delivery", "level": "WARN", "msg": "notification sent with empty body after template render failure", "per_min": 3, "after_min": 1}],
+      "changes": [{"kind": "deploy", "service": "msg-delivery", "ref": "msg-delivery-00290", "note": "notification template refactor", "offset_min": -1}]
+    }
+  ],
+  "trap": "two unrelated concurrent faults; both must be found, the primary ranked first"
+}

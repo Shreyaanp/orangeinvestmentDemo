@@ -1,0 +1,151 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Quoted prices are stale because market-data's price_age_s jumped from about 2s at 10:20 to 360.796 at 10:25 and has sat at 600.0 (probably a cap) since 10:30. Market-data's own logs still show 'price tick batch published' and 'feed heartbeat ok' through 10:44, with no WARN or ERROR anywhere. The metric and the logs disagree, so I prefer the metric: the data being served is frozen even though the service looks alive. Redis is healthy, and the only change in the window (a broker-gateway metrics label rename at 09:52) is 28 minutes before onset and has no documented link to market-data. The most likely cause is stale data from market-data's upstream feed or its publish path, but the available evidence cannot confirm which, and market-data's dependency view shows no upstream feed.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "market-data is publishing batches and heartbeating, but the price data is frozen (upstream feed stale or the update path not applying new ticks), so served prices stop moving from about 10:20-10:25.",
+   "component": "market-data",
+   "cause_type": "stale_upstream_feed",
+   "score": 2.1,
+   "confidence": 0.512,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "price_age_s was healthy (~2s) until 10:20, then rose sharply and pinned at 600",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Feed heartbeat reported ok after onset, so the heartbeat does not detect frozen data",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "market-data error rate and latency were flat, so the service is not failing requests",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The broker-gateway deploy at 09:52 caused the staleness.",
+   "component": "broker-gateway",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "redis-cache is serving stale prices because of eviction, memory or errors.",
+   "component": "redis-cache",
+   "cause_type": "cache_staleness",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "Redis was healthy, with no evictions and a stable hit ratio",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "price_age_s was healthy (~2s) until 10:20, then rose sharply and pinned at 600",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Feed heartbeat reported ok after onset, so the heartbeat does not detect frozen data",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Redis was healthy, with no evictions and a stable hit ratio",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "market-data error rate and latency were flat, so the service is not failing requests",
+   "evidence_ids": [
+    "E-008"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why price_age_s rose at about 10:20-10:25 is unknown; the logs show no cause.",
+  "Whether the upstream market feed, the tick publish path or the metric itself is at fault cannot be separated, because the logs and the metric disagree.",
+  "market-data's dependency view shows no upstream feed, so the feed provider's status is unchecked.",
+  "Whether 600.0 is a real age or a cap or sentinel value is unknown.",
+  "The 10:25 data point is a 5-minute downsample, so onset is known only to within 10:20-10:25."
+ ],
+ "actions": [
+  {
+   "text": "Check market-data's upstream feed and tick content directly: confirm whether prices in published batches are actually changing, and fail over or restart the feed consumer if they are frozen.",
+   "rationale": "price_age_s is pinned at 600 while logs claim healthy publishing, so the logs cannot be trusted to show data freshness.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Have the orchestrator warn users or refuse to quote prices when price_age_s exceeds a threshold, until freshness recovers.",
+   "rationale": "Users are being given stale quotes while the market is open.",
+   "evidence_ids": [
+    "E-001"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Alert on price_age_s and make the feed heartbeat check data freshness, not just liveness.",
+   "rationale": "The heartbeat and publish logs stayed green while data was stale, and no ERROR logs were produced.",
+   "evidence_ids": [
+    "E-003",
+    "E-004"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Confirm that broker-gateway-00518 has no effect on market-data. Treat it as a low-priority check.",
+   "rationale": "It is a metrics-only change 28 minutes before onset with no documented dependency.",
+   "evidence_ids": [
+    "E-005",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 22,
+  "tool_attempts": 22,
+  "llm_calls": 8,
+  "tokens_in": 61155,
+  "tokens_out": 11083,
+  "rounds": 0,
+  "elapsed_s": 272.6
+ },
+ "dropped_claims": 0
+}

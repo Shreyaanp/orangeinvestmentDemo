@@ -1,0 +1,142 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement failures come from broker-gateway. Its rate_limit_remaining metric fell to 0.0 and the upstream broker API began returning 429 (retry-after 30s) at about 12:00:20. Callers order-router (weight 0.8) and orchestrator (0.3) then logged HTTP 503, and web-app logged order-router 503s. order-router err_rate reached 0.32 and broker-gateway err_rate 0.407. No deploy, config, migration or flag change touches broker-gateway. The only changes were wa-webhook and web-app deploys at 11:05 and 11:16. I found no evidence for the portfolio sync failures or the slow assistant: aa-sync, portfolio-svc, the portfolio-updates queue and llm-gateway all look normal in their summaries. Those two symptoms remain unexplained.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "broker-gateway exhausted its upstream broker API rate limit. The broker returned 429, broker-gateway returned 503, and order-router and orchestrator order calls failed.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_rate_limit_exhausted",
+   "score": 3.925,
+   "confidence": 0.662,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "Upstream broker API is rate limiting broker-gateway",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Rate limit headroom was already declining at 12:00:11, just before the 429s",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "rate_limit_remaining is exhausted (last 0.0) and broker-gateway err_rate peaked at 0.407",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router and orchestrator are the callers of broker-gateway, so their 503s are downstream effects",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "order-router logs broker-gateway 503s after the 429s begin",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A recent deploy (wa-webhook or web-app) triggered the incident.",
+   "component": "wa-webhook",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "Upstream broker API is rate limiting broker-gateway",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Rate limit headroom was already declining at 12:00:11, just before the 429s",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "rate_limit_remaining is exhausted (last 0.0) and broker-gateway err_rate peaked at 0.407",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router and orchestrator are the callers of broker-gateway, so their 503s are downstream effects",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "order-router logs broker-gateway 503s after the 429s begin",
+   "evidence_ids": [
+    "E-005"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why orchestrator logged broker-gateway 503s from 11:55 while the first logged 429 is at 12:00:20 (the error log window was truncated at 50 of 309 matches).",
+  "What consumed the broker quota while broker-gateway rps stayed flat.",
+  "The cause of the portfolio sync failures; portfolio-svc, aa-sync and the portfolio-updates queue show no errors in their summaries, and portfolio-consumer was not checked.",
+  "The cause of the slow assistant replies; llm-gateway shows no obvious deviation in its summary, and time-series points were not examined.",
+  "Only summary metrics were retrieved, so exact onset times come from logs rather than metric points."
+ ],
+ "actions": [
+  {
+   "text": "Honor the broker's retry-after: add client-side throttling or backoff on broker-gateway calls, and queue or shed non-critical broker calls until rate_limit_remaining recovers.",
+   "rationale": "The broker is returning 429 and rate_limit_remaining is 0.0, so order calls are failing downstream.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check with the broker whether the quota can be raised, and find what consumed the quota while rps stayed flat (retry amplification, a batch job, or a quota change).",
+   "rationale": "Request volume was flat but the quota still ran out, and orchestrator 503s appear before the first logged 429.",
+   "evidence_ids": [
+    "E-006",
+    "E-008"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Investigate the portfolio sync failures and slow assistant replies separately. Pull time-series points for aa-sync, portfolio-consumer, llm-gateway and orchestrator, and look at logs for those services.",
+   "rationale": "The summaries for aa-sync, the portfolio-updates queue and llm-gateway look healthy, so the broker rate limit does not explain these symptoms.",
+   "evidence_ids": [
+    "E-009",
+    "E-010"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 23,
+  "tool_attempts": 23,
+  "llm_calls": 7,
+  "tokens_in": 48479,
+  "tokens_out": 12300,
+  "rounds": 0,
+  "elapsed_s": 278.2
+ },
+ "dropped_claims": 0
+}

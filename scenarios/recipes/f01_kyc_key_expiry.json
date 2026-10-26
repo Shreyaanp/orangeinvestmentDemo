@@ -1,0 +1,28 @@
+{
+  "id": "f01_kyc_key_expiry",
+  "seed": 101,
+  "start": "2026-05-04T11:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "New users cannot finish KYC verification and some returning users are stuck at login checks since about 11:50.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 50,
+      "truth": {"component": "auth-kyc", "cause_type": "credential_expiry", "description": "auth-kyc's API key for the external KYC vendor expired, so every vendor call is rejected with 401 and KYC checks fail. Nothing was deployed or reconfigured."},
+      "effects": [
+        {"target": "auth-kyc", "metric": "err_rate", "op": "add", "value": 0.45, "ramp_min": 1},
+        {"target": "auth-kyc", "metric": "latency_ms", "op": "mul", "value": 0.6, "ramp_min": 1}
+      ],
+      "logs": [
+        {"service": "auth-kyc", "level": "ERROR", "msg": "kyc vendor rejected request: 401 unauthorized, api key kyc-prod-2025 expired", "per_min": 6},
+        {"service": "orchestrator", "level": "WARN", "msg": "kyc status unavailable for session {rid}, asking user to retry later", "per_min": 2, "decisive": false}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 48,
+      "changes": [{"kind": "flag", "service": "web-app", "ref": "flag-onboarding-v2", "note": "onboarding_v2 rollout 10% -> 50%"}],
+      "logs": [{"service": "web-app", "level": "INFO", "msg": "onboarding flow v2 served to user {rid}", "per_min": 3}]
+    }
+  ],
+  "trap": "no change explains the fault (a credential expired); a flag rollout of a new onboarding flow lands two minutes earlier"
+}

@@ -1,0 +1,141 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement is failing because the upstream broker is returning 503s through broker-gateway, which order-router and orchestrator call. The 503 errors start at 13:58:03Z, slightly before the reported 14:00 onset. Over the window, broker-gateway err_rate peaked at 0.307 and order-router err_rate at 0.49. Order-router errors are most likely a consequence of the broker-gateway failure. The only changes in the window were two portfolio-consumer deploys, which are not in the order path. The metrics alone do not show broker-gateway as overloaded: rate_limit_remaining stayed high and rps was modest. I did not retrieve time-series points, so onset and recovery timing are from logs only.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The upstream broker is unavailable and returns 503s to broker-gateway, which fails orders in order-router and orchestrator. The broker-side cause is not visible from our telemetry.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_broker_unavailable",
+   "score": 4.25,
+   "confidence": 0.68,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "broker-gateway logs upstream broker 503s starting at 13:58:03Z, before the reported 14:00 start",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "503s continue through the 14:00 window",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "broker-gateway err_rate rose to 0.307 and was still 0.306 at the end of the window, against a minimum of 0.003",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router err_rate reached 0.49 and was still there at the end of the window",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "order-router calls broker-gateway with a heavy call weight, so its errors are downstream of the broker-gateway failure",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A recent change (portfolio-consumer deploy) caused the order failures.",
+   "component": "portfolio-consumer",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway logs upstream broker 503s starting at 13:58:03Z, before the reported 14:00 start",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "503s continue through the 14:00 window",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate rose to 0.307 and was still 0.306 at the end of the window, against a minimum of 0.003",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router err_rate reached 0.49 and was still there at the end of the window",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "order-router calls broker-gateway with a heavy call weight, so its errors are downstream of the broker-gateway failure",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why the upstream broker is returning 503s (outage, maintenance, or throttling on their side).",
+  "Exact onset and whether the incident is still ongoing, since time-series points were not retrieved.",
+  "Why logs end at 14:01:59Z while err_rate stays high.",
+  "Whether orchestrator's direct calls (weight 0.3) to broker-gateway are also failing."
+ ],
+ "actions": [
+  {
+   "text": "Check the broker's status page and open a support or escalation ticket with the broker about the 503s. Consider failing fast with a clear 'orders temporarily unavailable' message to users.",
+   "rationale": "503s from the upstream broker start at 13:58 and are the earliest visible failure; order-router errors follow from them.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-005",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check circuit-breaker and retry settings on broker-gateway and order-router so retries do not add load to a failing broker.",
+   "rationale": "err_rate is still elevated at the end of the window and order-router errors are higher than broker-gateway's.",
+   "evidence_ids": [
+    "E-003",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Pull err_rate time series for broker-gateway and order-router, and check why logs stop at 14:02, to confirm onset and current status.",
+   "rationale": "Only summary stats and a short log sample were retrieved.",
+   "evidence_ids": [
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 14,
+  "tool_attempts": 14,
+  "llm_calls": 5,
+  "tokens_in": 26010,
+  "tokens_out": 8406,
+  "rounds": 0,
+  "elapsed_s": 91.6
+ },
+ "dropped_claims": 0
+}

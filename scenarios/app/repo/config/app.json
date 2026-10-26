@@ -1,0 +1,22 @@
+{
+  "worker": {
+    "reserved_concurrency": 6,
+    "timeout_s": 30
+  },
+  "sqs": {
+    "visibility_timeout_s": 60,
+    "max_receive_count": 3
+  },
+  "tools": {
+    "portfolio": {"timeout_s": 3},
+    "broker": {"timeout_s": 5},
+    "aa": {"timeout_s": 10}
+  },
+  "session": {
+    "ttl_s": 300
+  },
+  "llm": {
+    "model": "claude-haiku-4-5",
+    "prompt_version": "v12"
+  }
+}

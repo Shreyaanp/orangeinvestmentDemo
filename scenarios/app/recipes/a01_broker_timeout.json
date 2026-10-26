@@ -1,0 +1,25 @@
+{
+  "id": "a01_broker_timeout",
+  "seed": 101,
+  "start": "2026-10-20T09:00:00Z",
+  "minutes": 90,
+  "incident_at_min": 62,
+  "incident_text": "Support tickets since about 09:40 UTC: users asking about order status on WhatsApp keep getting 'Sorry, I couldn't fetch that right now'. Balance questions seem fine.",
+  "changes": [
+    {"id": "tune-timeouts", "kind": "deploy", "service": "worker", "at_min": 38, "title": "perf: tighten broker tool timeout for faster replies", "author": "vikram",
+     "edits": [{"path": "config/app.json", "find": "\"broker\": {\"timeout_s\": 5}", "replace": "\"broker\": {\"timeout_s\": 0.5}"}]},
+    {"id": "sdk-bump", "kind": "deploy", "service": "sender", "at_min": 33, "title": "chore: bump httpx to 0.27.2", "author": "rahul",
+     "edits": [{"path": "requirements.txt", "find": "", "replace": "boto3==1.35.0\nhttpx==0.27.2\npsycopg==3.2.1\nredis==5.0.8\n"}]}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "tune-timeouts",
+     "truth": {"component": "worker", "cause_type": "bad_config_commit", "description": "A commit lowered the broker tool timeout in config/app.json from 5s to 0.5s; the partner broker API's normal latency (~450ms median) now exceeds it for a large share of calls, so order-status questions get the apology reply."},
+     "decisive": [
+       {"kind": "change", "service": "worker"},
+       {"kind": "log", "service": "worker", "level": "WARN", "contains": "tool broker failed"},
+       {"kind": "code", "service": "worker", "contains": "config/app.json"}
+     ]}
+  ],
+  "trap": "The broker API itself is healthy (latency unchanged); a sender deploy lands just before. The fault is our own timeout config, visible only in the diff.",
+  "answerable": true
+}

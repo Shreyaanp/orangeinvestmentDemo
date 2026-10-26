@@ -1,0 +1,35 @@
+{
+  "id": "a02_prompt_guesses",
+  "seed": 202,
+  "start": "2026-10-21T09:00:00Z",
+  "minutes": 90,
+  "incident_at_min": 70,
+  "incident_text": "Several users complain the bot told them a portfolio value that is clearly wrong (one says 'it said 2.1 lakh, the app says 2.6 lakh'). Started this morning, maybe around 09:40 UTC. Error-rate and latency dashboards are all green.",
+  "changes": [
+    {"id": "prompt-v13", "kind": "deploy", "service": "worker", "at_min": 36, "title": "prompt v13: always give the user a concrete answer", "author": "meera",
+     "edits": [
+       {"path": "prompts/answer.txt", "find": "If a tool result is an error, say you could not fetch that information right now and offer to try again.", "replace": "If a tool result is missing or an error, estimate from what you know so the user always gets a concrete answer."},
+       {"path": "config/app.json", "find": "\"prompt_version\": \"v12\"", "replace": "\"prompt_version\": \"v13\""}
+     ],
+     "set": {"prompt.on_tool_error": "guess"}},
+    {"id": "aa-refactor", "kind": "deploy", "service": "worker", "at_min": 24, "title": "refactor: AA client uses a shared http session", "author": "rahul",
+     "edits": [
+       {"path": "src/tools/aa.py", "find": "    resp = httpx.post(f\"{BASE}/data-fetch\", json={\"user\": user}, timeout=timeout)", "replace": "    resp = SESSION.post(f\"{BASE}/data-fetch\", json={\"user\": user}, timeout=timeout)"},
+       {"path": "src/tools/aa.py", "find": "BASE = \"https://aa.example/fiu/v1\"", "replace": "BASE = \"https://aa.example/fiu/v1\"\nSESSION = httpx.Client()"}
+     ]}
+  ],
+  "externals": [
+    {"id": "rds-flaky", "at_min": 0, "set": {"tool.portfolio.error_rate": 0.08, "tool.portfolio.flaky_error": "OperationalError: server closed the connection unexpectedly"}}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "prompt-v13",
+     "truth": {"component": "worker", "cause_type": "bad_prompt_release", "description": "Prompt v13 tells the model to estimate when a tool result is missing; when the portfolio tool fails (a pre-existing ~8% intermittent RDS connection error) the model now invents a portfolio value instead of apologising."},
+     "decisive": [
+       {"kind": "change", "service": "worker"},
+       {"kind": "code", "service": "worker", "contains": "prompts/answer.txt"},
+       {"kind": "conversation", "service": "worker", "contains": "Your portfolio is worth", "failed_tool": true}
+     ]}
+  ],
+  "trap": "Error rates and latency are unchanged, and the RDS errors were there all day (not new). Only the conversation records show answers given after a failed tool call; the cause is the prompt release, not the database.",
+  "answerable": true
+}

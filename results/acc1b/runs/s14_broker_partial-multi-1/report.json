@@ -1,0 +1,574 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most probable cause is a degradation in broker-gateway (or its upstream broker) on GET /orders/status starting at 10:00. Its error rate jumped from baseline and latency rose from ~220ms to a ~696ms peak, and both order-router and orchestrator began logging broker-gateway HTTP 503s within the same minute, with no recovery by 10:29. This is consistent with synchronous order calls failing or timing out, leaving orders 'order pending' and prompting customer retries. The 09:50 order-router deploy was a log-level tweak and is not supported as the cause: error rate and latency showed no step at deploy time and first moved at 10:00. Where the 503s originate (broker-gateway itself, its upstream, or an external vendor) is not established, and retry amplification and queue-side delays were not verified.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "broker-gateway (or its upstream broker) is degrading on GET /orders/status from 10:00, returning 503s and slow responses to both order-router and orchestrator, so synchronous order calls fail or time out, orders stay 'order pending' and customers retry.",
+   "component": "broker-gateway",
+   "cause_type": "dependency_degradation",
+   "score": 5.8,
+   "confidence": 0.744,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "broker-gateway err_rate was at baseline at 09:59 and jumped at 10:00, and latency rose from ~220ms to 331ms at 10:00, peaking at ~696ms at 10:04. Both were still elevated at the end of the window.",
+     "evidence_ids": [
+      "E-044",
+      "E-045",
+      "E-048",
+      "E-049"
+     ]
+    },
+    {
+     "text": "broker-gateway logged its first slow GET /orders/status WARN at 10:00:03, about 29 seconds before order-router's first 503 at 10:00:32. Slowness on that endpoint rose over 10:01-10:04.",
+     "evidence_ids": [
+      "E-046",
+      "E-047",
+      "E-074"
+     ]
+    },
+    {
+     "text": "Both of broker-gateway's callers, order-router and orchestrator, log broker-gateway HTTP 503s from the onset and continue through the end of the window. This points to a common origin rather than a single caller's fault.",
+     "evidence_ids": [
+      "E-001",
+      "E-063",
+      "E-064",
+      "E-067"
+     ]
+    },
+    {
+     "text": "No change was recorded for broker-gateway, and its request rate was flat, so a load spike does not explain the degradation.",
+     "evidence_ids": [
+      "E-088",
+      "E-050"
+     ]
+    },
+    {
+     "text": "It is likely that the slow /orders/status endpoint and the resulting 503s are what keep orders in 'order pending'. This link is an assumption, since the confirmation hop is not verified in the graph.",
+     "evidence_ids": [
+      "E-053",
+      "E-039"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "broker-gateway's own logs contain no ERROR or 503 lines, so it is not shown that broker-gateway returned the 503s. They may originate upstream of it, at an external broker, or at a boundary without a log line.",
+     "evidence_ids": [
+      "E-052",
+      "E-076",
+      "E-085"
+     ]
+    },
+    {
+     "text": "The cause of the slowness is unknown. broker-gateway has no visible callees, and no vendor or broker maintenance information was available.",
+     "evidence_ids": [
+      "E-086",
+      "E-090",
+      "E-091"
+     ]
+    },
+    {
+     "text": "The origin of the 503s rests on assumptions. The 20-second ordering between order-router and orchestrator is within possible clock skew.",
+     "evidence_ids": [
+      "E-010",
+      "E-065"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The 09:50 order-router deploy (order-router-00455) introduced a fault in order-router's broker-gateway client that causes its calls to fail and leaves orders pending.",
+   "component": "order-router",
+   "cause_type": "bad_code_release",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "The 09:50 order-router deploy was labelled a log-level tweak. Error rate and latency were flat across the deploy, and order-router's first deviation came at 10:00.",
+     "evidence_ids": [
+      "E-022",
+      "E-055",
+      "E-058",
+      "E-056"
+     ]
+    },
+    {
+     "text": "Order-router WARN logs from 09:45 to 10:00:30 show no restart, config or client messages, and orchestrator, which was not part of that deploy, fails the same way against broker-gateway.",
+     "evidence_ids": [
+      "E-062",
+      "E-063"
+     ]
+    },
+    {
+     "text": "The only past-incident match (INC-0431) was a validation regression with a different symptom. It is a hint only and is not evidence about this outage.",
+     "evidence_ids": [
+      "E-040",
+      "E-043"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "Retry amplification from customer and possibly order-router retries adds load to an already slow broker-gateway, sustaining the elevated errors and producing duplicate submissions; it is an amplifier, not the trigger.",
+   "component": "order-router",
+   "cause_type": "retry_amplification",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "Order-router request rate and broker-gateway request rate were both flat, so no volume spike is visible. Retries as an amplifier are therefore not demonstrated.",
+     "evidence_ids": [
+      "E-007",
+      "E-050"
+     ]
+    },
+    {
+     "text": "It is plausible that customer retries produce duplicate submissions, but retries and duplicate order IDs were never measured. This is an unverified assumption, and at most retries are an amplifier rather than the trigger.",
+     "evidence_ids": [
+      "E-011"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H4",
+   "statement": "The 'order pending' state sits in the queue-based confirmation path (inbound-msgs consumed by orchestrator, or portfolio-updates), where a backlog or consumer problem delays confirmations independently of the broker-gateway failure.",
+   "component": "rabbitmq",
+   "cause_type": "queue_or_consumer_failure",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "outbound-msgs shows no backlog: depth was zero, 4 consumers held steady, consume rate exceeded publish rate, and there was no dead-lettering. Redeliveries were low.",
+     "evidence_ids": [
+      "E-012",
+      "E-013",
+      "E-014",
+      "E-015"
+     ]
+    },
+    {
+     "text": "The metrics for inbound-msgs and portfolio-updates could not be checked, since rabbitmq exposes no per-queue depth or consumer metrics and the dependency lookup returned no edges. A queue-side delay is therefore not ruled out, only unsupported.",
+     "evidence_ids": [
+      "E-019",
+      "E-034",
+      "E-073"
+     ]
+    },
+    {
+     "text": "portfolio-updates is linked to aa-sync and portfolio-consumer with no order-confirmation link. Orchestrator's high mean latency is not shown to come from queue waiting.",
+     "evidence_ids": [
+      "E-069",
+      "E-009"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "order-router's first ERROR in the window is a broker-gateway call failing with HTTP 503, at the 10:00 onset.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "order-router error rate and latency are elevated in summary, while its request rate stayed flat (mean 19.859). This does not show a volume spike at the front of the order path.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "orchestrator latency is high on average (mean 983.738ms) but its error rate stays low (max 0.033). Its delay may be downstream waiting, which is not yet confirmed.",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "outbound-msgs queue depth stayed at zero across the window (max 0.0), with 4 consumers and no dead-lettering (dlq max 0.0).",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "outbound-msgs consumer count held at 4 for the whole window.",
+   "evidence_ids": [
+    "E-013"
+   ]
+  },
+  {
+   "text": "outbound-msgs consume rate averaged above publish rate (consume_rate mean 63.9 vs publish_rate mean 54.939), which is consistent with no backlog building.",
+   "evidence_ids": [
+    "E-014"
+   ]
+  },
+  {
+   "text": "outbound-msgs redeliveries are low (mean 0.511, max 0.701), so redelivery is not a visible driver in this window.",
+   "evidence_ids": [
+    "E-015"
+   ]
+  },
+  {
+   "text": "rabbitmq summary exposes no depth, consumer, unacked or DLQ metrics for inbound-msgs or portfolio-updates; it reports only err_rate, latency_ms, memory_pct and rps (rps mean 199.545, max 211.296).",
+   "evidence_ids": [
+    "E-019"
+   ]
+  },
+  {
+   "text": "order-router deployed at 09:50 UTC (log level tweak), about 10 minutes before reported onset; it is on the order path (called by web-app) but the note describes a logging-only change.",
+   "evidence_ids": [
+    "E-022"
+   ]
+  },
+  {
+   "text": "The rabbitmq dependency query returned no edges, so no producer or consumer links for inbound-msgs, outbound-msgs or portfolio-updates were confirmed.",
+   "evidence_ids": [
+    "E-034"
+   ]
+  },
+  {
+   "text": "Past incident INC-0431 (2026-02-02) involved order placement errors after a release, with root cause in the order-router release (past incident, hint only, not evidence about the current outage).",
+   "evidence_ids": [
+    "E-040"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate was at baseline at 09:59 and jumped at 10:00, the first per-minute departure in the window.",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "broker-gateway latency_ms rose from baseline (about 220ms) at 09:59 to 331.469ms at 10:00, peaking at 695.886ms at 10:04.",
+   "evidence_ids": [
+    "E-045"
+   ]
+  },
+  {
+   "text": "The first slow-endpoint WARN from broker-gateway is at 10:00:03, about 30 seconds before order-router's first 503 at 10:00:32.",
+   "evidence_ids": [
+    "E-046"
+   ]
+  },
+  {
+   "text": "Slow-request WARNs for GET /orders/status rise over 10:01–10:04 (438ms, then 570ms, 634ms, 696ms) and then stay around 620–690ms.",
+   "evidence_ids": [
+    "E-047"
+   ]
+  },
+  {
+   "text": "err_rate plateaued near 0.105 from 10:03 through 10:29 and had not recovered by the end of the window.",
+   "evidence_ids": [
+    "E-048"
+   ]
+  },
+  {
+   "text": "Latency was still elevated at 10:29 (622.199ms), so it had not recovered by the end of the window.",
+   "evidence_ids": [
+    "E-049"
+   ]
+  },
+  {
+   "text": "Request rate stayed flat across the window, with no volume spike at onset, which weakens a load-driven explanation.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "The query returned no ERROR-level or 503 lines from broker-gateway, so broker-gateway's own logs do not show where the 503s originate.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "order-router err_rate was flat across the 09:50 deploy: 0.005 at 09:49 and 09:50, with no step at deploy time.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "order-router err_rate first deviates from baseline at 10:00, about 10 minutes after the 09:50 deploy.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "order-router latency_ms has no step at the 09:50 deploy; values in the 09:30–09:59 pre-onset range stay between about 170 and 190 ms.",
+   "evidence_ids": [
+    "E-058"
+   ]
+  },
+  {
+   "text": "order-router WARN logs from 09:45 to 10:00:30 contain only four price-near-circuit-limit validation warnings, with no restart, config, client or timeout messages (not truncated).",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "orchestrator logs broker-gateway HTTP 503 errors starting at 10:00:52, about 20 seconds after order-router's first 503 (30 total, not truncated).",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "orchestrator broker-gateway 503 errors continue through the end of the window, matching order-router's pattern.",
+   "evidence_ids": [
+    "E-064"
+   ]
+  },
+  {
+   "text": "broker-gateway has two callers: order-router (weight 0.8) and orchestrator (weight 0.3). Orchestrator is a second direct caller of broker-gateway that was not previously in the graph.",
+   "evidence_ids": [
+    "E-067"
+   ]
+  },
+  {
+   "text": "portfolio-updates is published by aa-sync and consumed by portfolio-consumer. No order-confirmation producer or consumer is listed for this queue.",
+   "evidence_ids": [
+    "E-069"
+   ]
+  },
+  {
+   "text": "Broker-gateway's first degradation log is a slow order-status response at 10:00:03, about 29 seconds before order-router's first 503 at 10:00:32.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "The broker-gateway log window returned 136 WARN-level lines with no truncation or partial results, and none of the returned lines are ERROR-level or mention a status code.",
+   "evidence_ids": [
+    "E-076"
+   ]
+  },
+  {
+   "text": "broker-gateway's dependency query returned only callers (order-router and orchestrator) and no synchronous callees or queue edges, so its own downstream dependencies are not visible in this graph.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "No deploy, config, migration or flag changes were recorded for broker-gateway between 09:00 and 11:00 UTC, with the query complete and not truncated.",
+   "evidence_ids": [
+    "E-088"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "broker-gateway (or its own upstream) is the likely origin of the 503s and timeouts, since order-router only reports failures calling it. This is not yet verified, and I did not query broker-gateway logs.",
+   "evidence_ids": [
+    "E-010"
+   ]
+  },
+  {
+   "text": "Customer retries are plausibly producing duplicate order submissions, but I did not measure retries or duplicate order IDs, so this is unverified.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  },
+  {
+   "text": "The order-router to broker-gateway to postgres path is the synchronous order-placement path. The graph does not show orchestrator calling order-router, so the exact order confirmation hop is unverified.",
+   "evidence_ids": [
+    "E-039"
+   ]
+  },
+  {
+   "text": "INC-0431 differs from the current case: its symptom was placement errors (validation regression), while the current report is orders stuck in 'order pending' after placement with customer retries, which may point to a downstream confirmation or queue delay rather than validation.",
+   "evidence_ids": [
+    "E-043"
+   ]
+  },
+  {
+   "text": "broker-gateway is degrading on its own (or on its upstream) starting at 10:00, and the slow GET /orders/status endpoint may delay the 'order pending' state customers see.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "Because orchestrator fails with the same broker-gateway 503s starting within the same minute, the common origin is probably broker-gateway or its upstream, not order-router's deploy. The 20-second ordering is within possible clock skew, so it does not establish which caller failed first.",
+   "evidence_ids": [
+    "E-065"
+   ]
+  },
+  {
+   "text": "Order confirmation may run through portfolio-updates (aa-sync to portfolio-consumer) or through orchestrator's inbound-msgs consumption, but the graph has no edge linking these queues to order placement or to a confirmation step, so this remains unverified.",
+   "evidence_ids": [
+    "E-073"
+   ]
+  },
+  {
+   "text": "The 503 source is still unresolved. The broker-gateway logs describe slowness and do not mention a 503 or an error, so the failure may originate upstream of broker-gateway, or the 503 may be generated at the broker-gateway boundary without a log line.",
+   "evidence_ids": [
+    "E-085"
+   ]
+  },
+  {
+   "text": "Because broker-gateway has no recorded change and no visible callees, a change inside broker-gateway is unlikely to be the trigger. The 503s may originate at an external broker or vendor, which these tools cannot see.",
+   "evidence_ids": [
+    "E-090"
+   ]
+  },
+  {
+   "text": "No broker-side or vendor maintenance around 10:00 can be confirmed from the available tools; a vendor-side maintenance window remains an open hypothesis.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Where the 503s originate (broker-gateway, its upstream broker, an intermediate proxy, or an external vendor) is not established; broker-gateway logs show only slow WARNs.",
+  "No broker or vendor maintenance information was available; a vendor-side event remains an open possibility.",
+  "Retries and duplicate order submissions were not measured, so retry amplification (H3) is unverified.",
+  "inbound-msgs and portfolio-updates depth, consumers and lag could not be checked, and the dependency graph does not show how 'order pending' is confirmed, so a queue-side contribution (H4) cannot be excluded.",
+  "The earlier order-router timeout figures (E-002, E-003) were not reproduced in later checks and should be treated cautiously.",
+  "Clock skew between order-router and orchestrator is unknown, so their 20-second ordering is only suggestive.",
+  "The order-router WARN query was truncated and INFO logs were not queried, so trends after 10:00 and any INFO-level messages around the 09:50 deploy are incomplete.",
+  "The metric windows end around 10:29 and no previous-day baseline was queried, so recovery and comparison to normal behaviour are unknown.",
+  "INC-0431 is the only past match and is a hint only; historical coverage is thin.",
+  "No per-minute points were requested, so the onset shape (step vs gradual) and the exact time latency first rose cannot be confirmed for any service. Only order-router's log lines show the timing.",
+  "No previous-day baseline was queried, so 'elevated' is not compared against normal behaviour.",
+  "No latency percentiles (p50/p95/p99) were available. Only min/max/mean/last summaries exist, which blend pre-10:00 and post-10:00 data.",
+  "Retry and duplicate order submission counts were not collected for any service.",
+  "No logs were queried for broker-gateway, orchestrator or wa-webhook, so the 503 source and any orchestrator-side waiting remain unverified.",
+  "The order-router WARN query was truncated (total 197, only about 100 lines returned, last line 10:29:31Z), so the error count and later trend are incomplete. ERROR-level logs were not separately queried.",
+  "Metric summaries cover 09:30–11:00 and cannot show whether recovery occurred, so the 'last' values may not reflect steady state.",
+  "No time-series points were requested, so the onset around 10:00 and the earliest queue to deviate could not be found. Summaries alone cannot show a short spike.",
+  "rabbitmq summary has no per-queue metrics for inbound-msgs or portfolio-updates; I could not check their depth, consumers, unacked or DLQ counts.",
+  "The WARN 'timeout' search returned zero lines. That is not proof of health: it may reflect the level filter or the query terms rather than the services, and it does not cover errors that lack the word 'timeout'.",
+  "Logs for portfolio-consumer, msg-delivery and order-router were not queried, so the hinted timeout or connection-error checks are not done.",
+  "msg-delivery and portfolio-consumer lag metrics were not queried.",
+  "Call budget was reached after 5 calls, so I did not check the redis-cache and postgres connection or lock-wait details beyond the summary metrics.",
+  "get_changes returned no config, migration, flag, scaling, secret, certificate or token-rotation records for any service. Either none occurred or the source does not record those kinds; the result cannot distinguish the two.",
+  "No change records were returned for llm-gateway, auth-kyc, aa-sync, market-data, broker-gateway, portfolio services, rabbitmq, redis or postgres in the 08:00 to 10:15 window. Their absence is not proof of no change.",
+  "No third-party or broker-side maintenance notices were available from the tools.",
+  "get_dependencies was called only for order-router, so the downstream and queue topology of the other suspects (broker-gateway, rabbitmq, the order-confirmation path) was not checked.",
+  "The change window ends at 10:15 UTC, and changes after that are not covered.",
+  "Edges for auth-kyc, market-data, portfolio-svc, portfolio-consumer, aa-sync, msg-delivery, broker-gateway, web-app, redis-cache, postgres and rabbitmq were not queried, so timeouts, retries and shared-instance details are unknown.",
+  "The rabbitmq query returned no items, which could mean no edges or a lookup problem. The portfolio-updates and outbound-msgs consumers (including msg-delivery) are unconfirmed.",
+  "Orchestrator's dependency list has no order-router edge, so the orchestrator-to-order-router link needs confirming.",
+  "Timeout and retry configuration is not in the tool output, so the retry behaviour the customers saw cannot be tied to a configured value.",
+  "Change lookup was limited to deploy, config, migration and flag. Changes in the 2026-03-31 window before 09:00 UTC were not checked.",
+  "INC-0431 has null source and url and no time-of-day, so its onset/fix timing cannot be compared to the 10:00 UTC start.",
+  "The index returned only one past incident across three queries, so the historical coverage for queue backlog and broker-gateway slowness is thin and absence is not proof no similar incident occurred.",
+  "I did not check for current deploy, config, or flag changes against order-router or broker-gateway; that is outside these searches and should be verified before linking INC-0431 to this incident.",
+  "No ERROR-level or 503 lines from broker-gateway appear in the window, so the origin of the 503s (broker-gateway itself, its upstream, or an intermediate proxy) cannot be confirmed from its logs.",
+  "Metrics are per-minute, so the 10:00 onset cannot be ordered against order-router's 10:00:32 failure below one minute; the log timestamp (10:00:03) is the only sub-minute evidence.",
+  "The WARN query used minimum level WARN and did not query upstream or broker-side logs, so the cause of the latency is unknown.",
+  "rate_limit_remaining was not queried in this task (E-006 covers it from an earlier summary).",
+  "The 11 pre-onset 'broker responded slowly once' lines are not explained by any metric or upstream log.",
+  "Order-router WARN was only queried to 10:00:30, so the 'timeout' WARN lines cited earlier (from 10:01:14 on) were not re-verified. The earlier 197-line WARN result was not paged.",
+  "INFO logs were not queried, so restart, config or client-setting messages logged at INFO around the 09:50 deploy could be missing.",
+  "The latency_ms metric is not labelled as outbound broker-call duration, so it may be total request latency; the outbound-call metric was not found.",
+  "No broker-gateway logs or metrics were pulled in this run, so its own onset and error cause are unverified.",
+  "Pre-09:30 order-router baseline was not pulled, so the deploy comparison covers only 09:30–09:59.",
+  "Clock skew between order-router and orchestrator hosts is unknown, so their 20-second ordering is only suggestive.",
+  "Customer retries and duplicate order submissions were not measured.",
+  "The tool-call budget (about 5 calls) was used up, so further narrowing was not possible.",
+  "Retry counts, duplicate order-ID counts and per-minute order-pending counts from order-router and web-app logs were not collected, because my tools (get_changes, get_dependencies, search_incidents) do not query logs.",
+  "No consumer lag, consumer count or logs were available for inbound-msgs or portfolio-updates. The graph returns edges only, and rabbitmq metrics lack queue depth for these queues (E-019).",
+  "The dependency results carry no timestamps, so onset cannot be placed against the 10:00 start.",
+  "portfolio-consumer, aa-sync and orchestrator-to-broker-gateway health were not checked.",
+  "search_incidents returned only one past match (INC-0431), so there is no past incident for the 'pending' symptom specifically.",
+  "No broker-gateway ERROR-level or 5xx lines appear in the window, so the 503 source cannot be confirmed from broker-gateway logs.",
+  "err_rate and latency are 1-minute buckets, so it cannot be determined whether broker-gateway errors started before 10:00:32 within the 10:00 bucket.",
+  "The 'broker responded slowly once for request N' lines carry request IDs that were not correlated with order-router's 503 request IDs, so the same failing request could not be traced across the two services.",
+  "I did not query order-router logs for the exact 10:00:32 503 request or its endpoint, so it is unknown whether the 503 was for GET /orders/status or another call.",
+  "The upstream broker that broker-gateway calls is not in the service list and was not queried, so the origin of the slow responses beyond broker-gateway is unverified.",
+  "Query results were complete (136 lines, not truncated), but the WARN filter would not show DEBUG or INFO entries that might record the status code.",
+  "No tool exposes broker or vendor maintenance calendars or status notices, so this part of the task is unverified.",
+  "The dependency graph returned no callees and no queue edges for broker-gateway and did not flag truncation. It may be incomplete, so its downstream set is unknown rather than empty.",
+  "Broker-gateway metrics in the team summary have no time points, so its error onset cannot be aligned to 10:00 from my results.",
+  "broker-gateway logs and any external broker status page were not queried; these are outside my tools."
+ ],
+ "actions": [
+  {
+   "text": "Escalate to the broker or vendor and check their status page for an incident or maintenance around 10:00. In parallel, engage the broker-gateway owners to check its upstream connectivity.",
+   "rationale": "The degradation began at 10:00 on broker-gateway's GET /orders/status with no recorded change on broker-gateway, and it persisted through 10:29. Our tools cannot see the external broker.",
+   "evidence_ids": [
+    "E-044",
+    "E-046",
+    "E-048",
+    "E-088",
+    "E-090",
+    "E-091"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Do not roll back the 09:50 order-router deploy as a remedy. Only revisit it if broker-gateway checks come back clean.",
+   "rationale": "Order-router's metrics were flat across the deploy, and orchestrator fails against broker-gateway in the same way without that deploy.",
+   "evidence_ids": [
+    "E-055",
+    "E-058",
+    "E-063"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Consider tightening order-router and web-app retry behaviour, or applying temporary throttling or customer-facing messaging, to limit duplicate submissions while broker-gateway is degraded. Measure duplicate order IDs first.",
+   "rationale": "Customers are retrying while orders are pending. Duplicates are plausible but unmeasured, so this should be confirmed before changing behaviour.",
+   "evidence_ids": [
+    "E-011",
+    "E-061"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Pull broker-gateway INFO/DEBUG and proxy logs and correlate request IDs with order-router's 503s, to find where the 503s are generated and whether they are for GET /orders/status.",
+   "rationale": "broker-gateway WARN logs show only slowness, so the 503 source is unresolved.",
+   "evidence_ids": [
+    "E-052",
+    "E-076",
+    "E-085"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Check inbound-msgs and portfolio-updates depth, consumer lag and unacked counts, and confirm how order confirmation flows from order placement to the 'pending' state.",
+   "rationale": "Per-queue metrics and the confirmation hop were not available, so a queue-side contribution is not excluded.",
+   "evidence_ids": [
+    "E-019",
+    "E-034",
+    "E-073",
+    "E-039"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add broker-gateway alerting on /orders/status latency and 5xx rate, and review timeout, retry and circuit-breaker settings for order-router and orchestrator calls to broker-gateway.",
+   "rationale": "The degradation affected both callers and was sustained for at least 30 minutes, and there is a gradual latency rise that earlier alerting could catch.",
+   "evidence_ids": [
+    "E-047",
+    "E-048",
+    "E-067",
+    "E-082"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 38,
+  "tool_attempts": 38,
+  "llm_calls": 28,
+  "tokens_in": 211540,
+  "tokens_out": 53121,
+  "rounds": 2,
+  "elapsed_s": 165.5
+ },
+ "dropped_claims": 0
+}

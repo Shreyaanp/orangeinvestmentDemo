@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "llm-gateway",
+      "cause_type": "provider_rate_limit",
+      "description": "The LLM provider rate-limited llm-gateway (HTTP 429), causing retries, fallbacks and slow or failing assistant replies.",
+      "onset": "2026-03-23T13:55:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "llm-gateway",
+          "level": "ERROR",
+          "contains": "provider returned 429 rate limited, retrying with backoff",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-23T13:55:00Z",
+          "end": "2026-03-23T15:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "a past incident with near-identical symptoms had a different cause; redis hit ratio dips slightly as a bystander"
+}

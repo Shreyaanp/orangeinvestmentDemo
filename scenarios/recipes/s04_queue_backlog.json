@@ -1,0 +1,29 @@
+{
+  "id": "s04_queue_backlog",
+  "seed": 4,
+  "start": "2026-03-17T09:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 100,
+  "incident_text": "Users are receiving portfolio-update notifications hours late, and some have not arrived at all today.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 55,
+      "truth": {"component": "aa-sync", "cause_type": "cpu_throttling", "description": "aa-sync was CPU-throttled so its latency rose several-fold; the downstream consumer slowed and the portfolio-updates queue backed up, delaying notifications."},
+      "effects": [
+        {"target": "aa-sync", "metric": "latency_ms", "op": "mul", "value": 6, "ramp_min": 5},
+        {"target": "aa-sync", "metric": "cpu_throttle_pct", "op": "set", "value": 85, "ramp_min": 5}
+      ],
+      "logs": [{"service": "aa-sync", "level": "WARN", "msg": "request processing slow: p95 {latency_ms}ms, cpu throttled in {cpu_throttle_pct}% of periods", "per_min": 3}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 20, "until_min": 30,
+      "effects": [{"target": "rabbitmq", "metric": "memory_pct", "op": "set", "value": 82, "ramp_min": 3}],
+      "logs": [{"service": "rabbitmq", "level": "WARN", "msg": "memory resource limit alarm set on node rabbit@mq-0 ({memory_pct}% used)", "per_min": 1}]
+    },
+    {
+      "id": "D2", "role": "distractor", "at_min": 30, "until_min": 31,
+      "logs": [{"service": "rabbitmq", "level": "INFO", "msg": "memory resource limit alarm cleared on node rabbit@mq-0", "per_min": 1}]
+    }
+  ],
+  "trap": "benign broker memory alarm earlier in the window, already cleared"
+}

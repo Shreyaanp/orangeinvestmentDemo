@@ -1,0 +1,186 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "There are two independent problems. (1) Token cost and slowness: llm-gateway tokens_per_min rose from about 42k to a 400000 ceiling starting around 10:50-11:00 UTC, while orchestrator began logging 'agent loop detected: repeated tool call get_holdings x38' at 10:55:20. This points to an orchestrator agent tool-call loop burning LLM tokens. llm-gateway is a victim of that load, not the cause. portfolio-svc looks healthy, and no deploy, config or flag change landed near onset, so what triggered the loop is not established. (2) Blank notifications: the msg-delivery deploy at 11:24 ('notification template refactor') was followed from 11:25:18 by 'template render failed: missing variable portfolio_value' and redeliveries on outbound-msgs. That matches the blank or failed notifications and is separate from the token problem.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The orchestrator agent repeatedly calls get_holdings in a loop, driving runaway LLM token use, slowness and the token-cost alert. llm-gateway is saturated as a consequence.",
+   "component": "orchestrator",
+   "cause_type": "agent_tool_call_loop",
+   "score": 2.5,
+   "confidence": 0.556,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "llm-gateway tokens_per_min jumped from about 42k to 131k in the 10:50 bucket, then pinned at 400000",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Earliest orchestrator agent loop error in the window, at 10:55:20; the query ended 10:56 and returned only 3 hits",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "orchestrator calls llm-gateway with the highest weight, so loop traffic flows into the gateway",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "llm-gateway latency is elevated but its error and parse-failure rates are low, which fits load rather than a gateway fault",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "portfolio-svc, the get_holdings backend, shows normal latency and error rate, so it is not the failing dependency",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The msg-delivery template refactor deploy (msg-delivery-00290) removed or renamed the portfolio_value variable, so notifications fail to render or go out blank. This is independent of the token spike.",
+   "component": "msg-delivery",
+   "cause_type": "bad_deploy_template_regression",
+   "score": 1.8,
+   "confidence": 0.474,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "msg-delivery template render failures began right after its 11:24 deploy",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "msg-delivery deployed a template refactor at 11:24, before the render errors",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "llm-gateway tokens_per_min jumped from about 42k to 131k in the 10:50 bucket, then pinned at 400000",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Earliest orchestrator agent loop error in the window, at 10:55:20; the query ended 10:56 and returned only 3 hits",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "msg-delivery template render failures began right after its 11:24 deploy",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "msg-delivery deployed a template refactor at 11:24, before the render errors",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-svc, the get_holdings backend, shows normal latency and error rate, so it is not the failing dependency",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "orchestrator calls llm-gateway with the highest weight, so loop traffic flows into the gateway",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "llm-gateway latency is elevated but its error and parse-failure rates are low, which fits load rather than a gateway fault",
+   "evidence_ids": [
+    "E-007"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "What triggered the get_holdings loop: no deploy, config or flag change near 10:50-10:55 explains it, and the metrics-label-rename deploys at 10:12-10:25 are unproven as related.",
+  "The loop errors were seen in a truncated log result (180 total, 50 returned), so the true start time and number of affected sessions are not confirmed. The 10:50 token bucket may begin slightly before 10:55:20.",
+  "Whether the 400000 tokens_per_min is a provider or gateway cap, and how much real demand is being throttled.",
+  "The msg-delivery logs were truncated (60 total), and the exact count of blank notifications was not measured.",
+  "Whether the token spike and the blank notifications interact, for example blank messages causing user retries, was not tested."
+ ],
+ "actions": [
+  {
+   "text": "Roll back msg-delivery to the release before msg-delivery-00290, or hotfix the template to supply portfolio_value.",
+   "rationale": "Render errors started about 1 minute after the deploy and match the blank notifications.",
+   "evidence_ids": [
+    "E-003",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Cap per-session tool calls in orchestrator (the loop guard aborts only at x38) and add a per-user or global token budget and rate limit on llm-gateway to stop the cost burn.",
+   "rationale": "Tokens are pinned at 400000 per minute, driven by looping sessions.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Inspect orchestrator get_holdings call and response payloads for a few looping sessions, along with the prompt and tool definitions, to find why the model keeps re-calling it. Check whether the tool result shape changed.",
+   "rationale": "portfolio-svc is healthy and no change correlates with onset, so the trigger is unknown.",
+   "evidence_ids": [
+    "E-002",
+    "E-005",
+    "E-008"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Confirm the outbound-msgs backlog and redelivery loop drain after the msg-delivery fix, and resend or suppress the failed notifications.",
+   "rationale": "Redelivered messages indicate repeated failures on outbound-msgs.",
+   "evidence_ids": [
+    "E-003"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add a deploy-time template variable contract test for msg-delivery and an alert on agent-loop error rate.",
+   "rationale": "Both failures were detected only through user reports or cost alerts.",
+   "evidence_ids": [
+    "E-002",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 25,
+  "tool_attempts": 25,
+  "llm_calls": 7,
+  "tokens_in": 63422,
+  "tokens_out": 12043,
+  "rounds": 0,
+  "elapsed_s": 179.2
+ },
+ "dropped_claims": 0
+}

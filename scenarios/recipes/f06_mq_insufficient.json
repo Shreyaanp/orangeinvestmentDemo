@@ -1,0 +1,35 @@
+{
+  "id": "f06_mq_insufficient",
+  "seed": 106,
+  "start": "2026-05-15T10:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 90,
+  "incident_text": "Portfolio updates after bank-account syncs are delayed for many users since about 11:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "rabbitmq", "cause_type": "memory_alarm_flow_control", "description": "A rabbitmq memory alarm blocked publishers (flow control), so aa-sync could publish few portfolio updates. The broker's own logs and memory metric are deliberately missing from the data."},
+      "effects": [
+        {"target": "rabbitmq", "metric": "memory_pct", "op": "set", "value": 92, "ramp_min": 3},
+        {"target": "portfolio-updates", "metric": "publish_rate", "op": "mul", "value": 0.25, "ramp_min": 3}
+      ],
+      "logs": [{"service": "rabbitmq", "level": "WARN", "msg": "memory resource limit alarm set, blocking publishing connections", "per_min": 2}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 57,
+      "changes": [{"kind": "deploy", "service": "aa-sync", "ref": "aa-sync-00648", "note": "refactor consent refresh scheduler"}]
+    },
+    {
+      "id": "D2", "role": "distractor", "at_min": 58,
+      "effects": [{"target": "postgres", "metric": "slow_queries", "op": "set", "value": 9, "ramp_min": 5}],
+      "logs": [{"service": "postgres", "level": "WARN", "msg": "slow query logged: aa consent lookup took 1.8s", "per_min": 1}]
+    }
+  ],
+  "artifacts": [
+    {"kind": "log_drop", "service": "rabbitmq", "from_min": 0, "keep_frac": 0.0},
+    {"kind": "metric_missing", "service": "rabbitmq", "metric": "memory_pct"}
+  ],
+  "answerable": false,
+  "expected_status": "INCONCLUSIVE",
+  "trap": "the broker's logs and memory metric are missing; a producer deploy and a slow database are both plausible but unproven"
+}

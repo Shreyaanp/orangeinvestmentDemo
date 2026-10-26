@@ -1,0 +1,196 @@
+{
+ "status": "INCONCLUSIVE",
+ "status_reason": "top confidence 0.429 is below 0.45",
+ "summary": "portfolio-svc latency rose from about 120 ms to about 360 ms starting at 13:00 UTC, while error rate stayed flat (0.002-0.004, matching the report of no user errors). The earliest deviation is redis-cache's hit ratio, which fell below threshold from 12:58:49 and has sat at 0.88 since 13:02. The portfolio-svc deploy at 12:57 (described as a 'minor copy change') is the closest change before onset and is a candidate trigger, but I did not verify what it changed. Postgres summary metrics look healthy, so the extra latency is most likely cache misses on holdings reads rather than database saturation. I cannot separate a cache-key or behaviour change in the portfolio-svc deploy from a redis-side problem with the evidence gathered.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "redis-cache hit ratio degraded from about 12:58, so more portfolio-svc holdings reads miss the cache and are slower, which raised portfolio-svc latency from 13:00.",
+   "component": "redis-cache",
+   "cause_type": "cache_hit_ratio_degradation",
+   "score": 1.5,
+   "confidence": 0.429,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "portfolio-svc latency was flat near 121 ms at 12:55",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "portfolio-svc latency stepped up at 13:00 and stayed high",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "redis-cache hit ratio first dropped below threshold at 12:58:49, before the latency step",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "hit ratio stayed at 0.88 and had not recovered at 13:29",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-svc depends mostly on postgres (0.8) and redis-cache (0.2)",
+     "evidence_ids": [
+      "E-009"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "redis-cache shows no evictions and moderate memory, so the misses are not explained by memory pressure",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "portfolio-svc logged holdings cache misses from 12:41, well before latency rose, so they do not mark onset",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The portfolio-svc-00712 deploy at 12:57 (labelled 'minor copy change') altered cache key usage or read behaviour, which triggered the hit-ratio drop.",
+   "component": "portfolio-svc",
+   "cause_type": "deploy_cache_behavior_change",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "portfolio-svc was deployed at 12:57, shortly before onset",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "redis-cache hit ratio first dropped below threshold at 12:58:49, before the latency step",
+     "evidence_ids": [
+      "E-003"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "portfolio-svc logged holdings cache misses from 12:41, well before latency rose, so they do not mark onset",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "portfolio-svc latency was flat near 121 ms at 12:55",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "portfolio-svc latency stepped up at 13:00 and stayed high",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "redis-cache hit ratio first dropped below threshold at 12:58:49, before the latency step",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "hit ratio stayed at 0.88 and had not recovered at 13:29",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-svc was deployed at 12:57, shortly before onset",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "redis-cache shows no evictions and moderate memory, so the misses are not explained by memory pressure",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "portfolio-svc depends mostly on postgres (0.8) and redis-cache (0.2)",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "portfolio-svc logged holdings cache misses from 12:41, well before latency rose, so they do not mark onset",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Whether the portfolio-svc-00712 deploy actually changed cache behaviour is unverified; only its change note was seen.",
+  "Why the hit ratio began dropping at about 12:58 is unknown, so trigger and root cause are not separated.",
+  "The mechanism of the extra latency (database fall-through versus something else) is inferred, not measured.",
+  "Holdings cache-miss warnings in portfolio-svc began at 12:41 without any latency impact, and their relation to the later hit-ratio drop is unclear.",
+  "Postgres and redis metrics were checked only as whole-window summaries, not time series, so a small shift near 13:00 could be hidden."
+ ],
+ "actions": [
+  {
+   "text": "Diff portfolio-svc-00712 for changes to cache keys, TTLs or holdings read paths. If anything cache-related changed, roll it back.",
+   "rationale": "It is the closest change before the hit-ratio drop and the latency step, and the 'copy change' label may understate what changed.",
+   "evidence_ids": [
+    "E-005",
+    "E-003",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check redis-cache for what is missing: key patterns, TTL or expiry behaviour, and any flush or restart around 12:58. Also check whether redis-cache-00897 changed anything beyond the log level.",
+   "rationale": "The hit ratio fell without evictions or memory pressure, so the cause is likely key churn, expiry or a client-side change.",
+   "evidence_ids": [
+    "E-003",
+    "E-004",
+    "E-006",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check postgres per-query load from portfolio-svc holdings queries over 12:55-13:30 to confirm the misses are falling through to the database.",
+   "rationale": "Summary metrics look healthy, but a time-series view would confirm or rule out the fall-through mechanism.",
+   "evidence_ids": [
+    "E-008",
+    "E-009",
+    "E-011"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 17,
+  "tool_attempts": 17,
+  "llm_calls": 6,
+  "tokens_in": 40157,
+  "tokens_out": 10088,
+  "rounds": 0,
+  "elapsed_s": 121.8
+ },
+ "dropped_claims": 0
+}

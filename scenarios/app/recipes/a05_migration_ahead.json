@@ -1,0 +1,26 @@
+{
+  "id": "a05_migration_ahead",
+  "seed": 505,
+  "start": "2026-10-22T11:00:00Z",
+  "minutes": 90,
+  "incident_at_min": 66,
+  "incident_text": "Every balance and holdings question gets 'Sorry, I couldn't fetch that right now' since about 11:40 UTC. Order status questions still work.",
+  "changes": [
+    {"id": "code-quantity", "kind": "deploy", "service": "worker", "at_min": 36, "title": "portfolio: read holdings.quantity", "author": "vikram", "ci": "failure",
+     "edits": [{"path": "src/tools/portfolio.py", "find": "SELECT h.symbol, h.qty, p.last_price, h.qty * p.last_price AS value", "replace": "SELECT h.symbol, h.quantity, p.last_price, h.quantity * p.last_price AS value"}]},
+    {"id": "rename-qty", "kind": "migration", "service": "rds-postgres", "at_min": 40, "title": "migration 002: rename holdings.qty to quantity", "author": "vikram",
+     "edits": [{"path": "db/migrations/002_rename_qty.sql", "find": "", "replace": "ALTER TABLE holdings RENAME COLUMN qty TO quantity;\n"}],
+     "set": {"tool.portfolio.error": "UndefinedColumn: column h.qty does not exist"}}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "rename-qty",
+     "truth": {"component": "rds-postgres", "cause_type": "schema_migration_ahead_of_code", "description": "Migration 002 renamed holdings.qty to quantity, but the code change that reads the new column failed CI and was never deployed, so every portfolio query fails with 'column h.qty does not exist'."},
+     "decisive": [
+       {"kind": "change", "service": "rds-postgres"},
+       {"kind": "log", "service": "worker", "level": "WARN", "contains": "column h.qty does not exist"},
+       {"kind": "code", "service": "rds-postgres", "contains": "db/migrations/002_rename_qty.sql"}
+     ]}
+  ],
+  "trap": "The matching code commit exists in git but its CI run failed, so it was never deployed; get_changes defaults to deploys and does not show the migration.",
+  "answerable": true
+}

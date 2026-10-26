@@ -1,0 +1,106 @@
+[project]
+name = "incident-investigator"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "google-adk>=2.13",
+    "claude-agent-sdk>=0.2.174",
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "pytest", "pytest-asyncio", "hypothesis", "import-linter", "httpx"]
+retrieval = ["fastembed>=0.5"]  # opt-in hybrid retrieval (RETRIEVAL=hybrid); needs onnxruntime wheels
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# the investigator lives in src/; the evaluation harness and the mock APIs live under tests/
+where = ["src", "tests"]
+include = ["incident*", "eval", "mockworld"]
+
+[tool.setuptools.package-data]
+"incident.agents" = ["prompts/*.md"]
+
+[tool.ruff]
+line-length = 100
+force-exclude = true
+extend-exclude = ["scenarios/app/repo"]  # fixture code of the simulated app, not ours
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "SIM", "C90", "UP", "T20", "BLE", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"tests/{adapters,api,core,golden,harness,orch,sim,tools}/**" = ["S", "T20", "E501", "SIM"]
+"src/scripts/**" = ["T20", "S603", "S607"]
+"src/incident/sim/**" = ["S311"]
+"tests/eval/**" = ["T20", "S311"]
+
+[tool.mypy]
+strict = true
+exclude = ["scenarios/app/repo/", "src/scripts/"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["fastembed", "fastembed.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = ["live: calls the real LLM backend (opt-in, run with -m live)"]
+addopts = "-m 'not live'"
+
+[tool.importlinter]
+root_packages = ["incident", "eval"]
+
+[[tool.importlinter.contracts]]
+name = "incident layering"
+type = "layers"
+layers = [
+    "incident.api",
+    "incident.hybrid",
+    "incident.orchestrator | incident.baseline",
+    "incident.agents",
+    "incident.report",
+    "incident.adapters",
+    "incident.tools | incident.grounding | incident.scoring | incident.llm | incident.memory | incident.knowledge",
+    "incident.state",
+    "incident.messages | incident.protocol | incident.trace | incident.redact | incident.retrieval",
+    "incident.models",
+    "incident.app_models",
+    "incident.base",
+]
+
+[[tool.importlinter.contracts]]
+name = "runtime never imports the simulator or adapters"
+type = "forbidden"
+source_modules = [
+    "incident.api", "incident.hybrid", "incident.orchestrator", "incident.baseline", "incident.agents",
+    "incident.report", "incident.tools", "incident.grounding", "incident.scoring",
+    "incident.llm", "incident.memory", "incident.knowledge", "incident.redact", "incident.retrieval", "incident.state", "incident.messages",
+    "incident.protocol",
+    "incident.trace", "incident.models", "incident.app_models", "incident.base",
+]
+forbidden_modules = ["incident.sim", "incident.adapters"]
+
+[[tool.importlinter.contracts]]
+name = "adapters never import agents or the simulator"
+type = "forbidden"
+source_modules = ["incident.adapters"]
+forbidden_modules = ["incident.agents", "incident.orchestrator", "incident.baseline", "incident.hybrid", "incident.sim"]
+
+[[tool.importlinter.contracts]]
+name = "runtime never imports eval"
+type = "forbidden"
+source_modules = ["incident"]
+forbidden_modules = ["eval"]

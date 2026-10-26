@@ -1,0 +1,50 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "rds-postgres",
+      "cause_type": "schema_migration_ahead_of_code",
+      "description": "Migration 002 renamed holdings.qty to quantity, but the code change that reads the new column failed CI and was never deployed, so every portfolio query fails with 'column h.qty does not exist'.",
+      "onset": "2026-10-22T11:40:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "rds-postgres",
+          "level": null,
+          "contains": "cb475c7",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-22T11:40:00Z",
+          "end": "2026-10-22T12:30:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "worker",
+          "level": "WARN",
+          "contains": "column h.qty does not exist",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-22T11:40:00Z",
+          "end": "2026-10-22T12:30:00Z"
+        },
+        {
+          "kind": "code",
+          "service": "rds-postgres",
+          "level": null,
+          "contains": "db/migrations/002_rename_qty.sql",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-22T11:40:00Z",
+          "end": "2026-10-22T12:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "The matching code commit exists in git but its CI run failed, so it was never deployed; get_changes defaults to deploys and does not show the migration."
+}

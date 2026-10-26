@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "redis-cache",
+      "cause_type": "cache_stampede",
+      "description": "A cache stampede on redis-cache after a burst of hot-key TTL expiry: the hit ratio collapsed, load fell on postgres, and portfolio-svc slowed.",
+      "onset": "2026-03-24T15:10:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "redis-cache",
+          "level": "WARN",
+          "contains": "ttl expiry burst:",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-24T15:10:00Z",
+          "end": "2026-03-24T15:45:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "the metrics tool times out on the first two calls and returns partial data on the next two"
+}

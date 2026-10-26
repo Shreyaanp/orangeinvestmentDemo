@@ -1,0 +1,1558 @@
+{
+ "incident_text": "Users say their balances are out of date: trades made more than ten minutes ago do not show up.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 39,
+  "tool_attempts": 39,
+  "llm_calls": 32,
+  "tokens_in": 238304,
+  "tokens_out": 58597
+ },
+ "round": 2,
+ "elapsed_s": 270.0778183999937,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "portfolio-svc cache_staleness_s over 11:00-13:00 peaked at 1800 s, with the last sample also at 1800 s and a mean of 832.5 s.",
+   "excerpt": "{\"service\":\"portfolio-svc\",\"metric\":\"cache_staleness_s\",\"stats\":{\"min\":0.0,\"max\":1800.0,\"mean\":832.5,\"last\":1800.0,\"missing\":0}",
+   "source_call_id": "T1-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-001",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "portfolio-svc error rate stayed in a low band (min 0.002, max 0.004) across the window.",
+   "excerpt": "{\"service\":\"portfolio-svc\",\"metric\":\"err_rate\",\"stats\":{\"min\":0.002,\"max\":0.004,\"mean\":0.003,\"last\":0.003,\"missing\":0}",
+   "source_call_id": "T1-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-002",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "portfolio-svc latency averaged 120.068 ms over the window, with a max of 130.149 ms.",
+   "excerpt": "{\"service\":\"portfolio-svc\",\"metric\":\"latency_ms\",\"stats\":{\"min\":111.359,\"max\":130.149,\"mean\":120.068,\"last\":113.954,\"missing\":0}",
+   "source_call_id": "T1-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-003",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer error rate stayed low (min 0.002, max 0.004, last 0.004).",
+   "excerpt": "{\"service\":\"portfolio-consumer\",\"metric\":\"err_rate\",\"stats\":{\"min\":0.002,\"max\":0.004,\"mean\":0.003,\"last\":0.004,\"missing\":0}",
+   "source_call_id": "T1-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-004",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer latency mean was 162.724 ms with a max of 190.197 ms.",
+   "excerpt": "{\"service\":\"portfolio-consumer\",\"metric\":\"latency_ms\",\"stats\":{\"min\":139.261,\"max\":190.197,\"mean\":162.724,\"last\":178.121,\"missing\":0}",
+   "source_call_id": "T1-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-005",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "First portfolio-consumer WARN in the window: an update was reported as having no changes, and these WARNs recur through 12:56:51Z (20 lines total, no ERROR lines returned).",
+   "excerpt": "2026-03-30T11:17:47Z WARN portfolio-consumer: update 583 had no changes",
+   "source_call_id": "T1-03",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-30T11:17:47Z",
+   "ref": null,
+   "id": "E-006",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "First portfolio-svc WARN in the window is a holdings cache miss at 11:03:02Z; 18 such WARNs total, the last at 12:55:56Z.",
+   "excerpt": "2026-03-30T11:03:02Z WARN portfolio-svc: cache miss for holdings key 136270",
+   "source_call_id": "T1-04",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T11:03:02Z",
+   "ref": null,
+   "id": "E-007",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "FACT",
+   "claim": "rabbitmq looked healthy over the window: err_rate 0.0 and mean latency 1.991 ms.",
+   "excerpt": "{\"service\":\"rabbitmq\",\"metric\":\"err_rate\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}",
+   "source_call_id": "T1-05",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-008",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-009": {
+   "kind": "ASSUMPTION",
+   "claim": "Possibly the consumer is receiving trade updates that it considers already applied or empty, so portfolio-updates messages may not be carrying the new trade changes. This is unverified and needs the message payloads or the queue metrics.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-009",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-010": {
+   "kind": "ASSUMPTION",
+   "claim": "Cache misses on holdings keys in portfolio-svc, together with the staleness metric hitting its 1800 s ceiling, may mean the read path serves cached holdings that are not refreshed after trades. This is unverified; no cache-refresh logs were queried.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-010",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-011": {
+   "kind": "ASSUMPTION",
+   "claim": "The rise in portfolio-consumer latency (mean 162.7 ms vs portfolio-svc 120.1 ms) may be a secondary symptom and is not clearly abnormal without a baseline.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-011",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-012": {
+   "kind": "FACT",
+   "claim": "portfolio-updates queue depth stayed near zero over the window, with a max of 1.283 and a last value of 0.0.",
+   "excerpt": "portfolio-updates depth stats:{\"min\":0.0,\"max\":1.283,\"mean\":0.064,\"last\":0.0,\"missing\":0}",
+   "source_call_id": "T2-04",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-012",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-013": {
+   "kind": "FACT",
+   "claim": "Publish rate and consume rate were close, with consume rate slightly higher on average, so the queue was not backing up.",
+   "excerpt": "portfolio-updates publish_rate stats:{\"min\":37.707,\"max\":42.558,\"mean\":40.146,\"last\":40.137,\"missing\":0}; portfolio-updates consume_rate stats:{\"min\":39.327,\"max\":49.913,\"mean\":45.99,\"last\":41.957,\"missing\":0}",
+   "source_call_id": "T2-04",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-013",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-014": {
+   "kind": "FACT",
+   "claim": "Consumer count was steady at 3 and the dead-letter queue stayed at zero.",
+   "excerpt": "portfolio-updates consumers stats:{\"min\":3.0,\"max\":3.0,\"mean\":3.0,\"last\":3.0,\"missing\":0}; portfolio-updates dlq stats:{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}",
+   "source_call_id": "T2-04",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-014",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-015": {
+   "kind": "FACT",
+   "claim": "Redeliveries were low but non-zero, with a mean of 0.272 and a max of 0.375.",
+   "excerpt": "portfolio-updates redeliveries stats:{\"min\":0.174,\"max\":0.375,\"mean\":0.272,\"last\":0.298,\"missing\":0}",
+   "source_call_id": "T2-04",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-015",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-016": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer error rate was low (mean 0.003, max 0.004), and its throughput was steady at about 40 rps.",
+   "excerpt": "portfolio-consumer err_rate stats:{\"min\":0.002,\"max\":0.004,\"mean\":0.003,\"last\":0.004,\"missing\":0}; portfolio-consumer rps stats:{\"min\":37.641,\"max\":42.705,\"mean\":39.931,\"last\":39.838,\"missing\":0}",
+   "source_call_id": "T2-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-016",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-017": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer latency per message was elevated compared with the rest of the path, with a mean of 162.7 ms and a max of 190.2 ms. This is a summary and not a per-message breakdown.",
+   "excerpt": "portfolio-consumer latency_ms stats:{\"min\":139.261,\"max\":190.197,\"mean\":162.724,\"last\":178.121,\"missing\":0}",
+   "source_call_id": "T2-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-017",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-018": {
+   "kind": "FACT",
+   "claim": "Postgres showed no connection pool saturation and write latency near 8 ms, which does not support a DB bottleneck.",
+   "excerpt": "postgres pool_waiting stats:{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}; postgres latency_ms stats:{\"min\":7.452,\"max\":8.755,\"mean\":7.994,\"last\":8.246,\"missing\":0}",
+   "source_call_id": "T2-05",
+   "service": "postgres",
+   "ts": null,
+   "ref": null,
+   "id": "E-018",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-019": {
+   "kind": "FACT",
+   "claim": "Postgres replication lag was about 0.4 s and slow queries averaged about 1 per interval, so neither is large.",
+   "excerpt": "postgres replication_lag_s stats:{\"min\":0.381,\"max\":0.423,\"mean\":0.401,\"last\":0.404,\"missing\":0}; postgres slow_queries stats:{\"min\":0.917,\"max\":1.044,\"mean\":0.998,\"last\":0.985,\"missing\":0}",
+   "source_call_id": "T2-05",
+   "service": "postgres",
+   "ts": null,
+   "ref": null,
+   "id": "E-019",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-020": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer emitted only WARN lines in the window, with no ERROR lines. Each was 'update N had no changes', and 20 total were returned without truncation. The first was at 11:17:47Z and the last at 12:56:51Z.",
+   "excerpt": "2026-03-30T12:56:51Z WARN portfolio-consumer: update 464928 had no changes",
+   "source_call_id": "T2-03",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-30T12:56:51Z",
+   "ref": null,
+   "id": "E-020",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-021": {
+   "kind": "FACT",
+   "claim": "RabbitMQ summary metrics show no error rate, with the error rate at 0.0 throughout. Its latency was about 2 ms and rps about 200. Queue-level metrics were not in this summary.",
+   "excerpt": "rabbitmq err_rate stats:{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}; rabbitmq latency_ms stats:{\"min\":1.842,\"max\":2.127,\"mean\":1.991,\"last\":1.955,\"missing\":0}",
+   "source_call_id": "T2-01",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-021",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-022": {
+   "kind": "ASSUMPTION",
+   "claim": "The 'had no changes' WARNs may mean the consumer received updates for which the DB had no change to apply, possibly dropping real balance changes. This is unverified and needs checking against the message payloads and the portfolio rows.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-022",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-023": {
+   "kind": "FACT",
+   "claim": "portfolio-svc config change raised the holdings cache TTL from 60 s to 1800 s, 30 minutes before the report and closest to onset.",
+   "excerpt": "HOLDINGS_CACHE_TTL_S 60 -> 1800",
+   "source_call_id": "T3-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-023",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-024": {
+   "kind": "FACT",
+   "claim": "Config change record reference for the holdings cache TTL change.",
+   "excerpt": "cfg-holdings-cache-ttl",
+   "source_call_id": "T3-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-024",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-025": {
+   "kind": "FACT",
+   "claim": "market-data deploy 'dependency bump' shortly before onset; no direct link to balance caching is shown in the graph.",
+   "excerpt": "dependency bump",
+   "source_call_id": "T3-01",
+   "service": "market-data",
+   "ts": "2026-03-30T11:19:00Z",
+   "ref": null,
+   "id": "E-025",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-026": {
+   "kind": "FACT",
+   "claim": "llm-gateway deploy with a metrics label rename; unlikely to affect balances.",
+   "excerpt": "metrics label rename",
+   "source_call_id": "T3-01",
+   "service": "llm-gateway",
+   "ts": "2026-03-30T11:20:00Z",
+   "ref": null,
+   "id": "E-026",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-027": {
+   "kind": "FACT",
+   "claim": "broker-gateway deploy recorded as a log level tweak; no broker API or credential change recorded.",
+   "excerpt": "log level tweak",
+   "source_call_id": "T3-01",
+   "service": "broker-gateway",
+   "ts": "2026-03-30T11:27:00Z",
+   "ref": null,
+   "id": "E-027",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-028": {
+   "kind": "FACT",
+   "claim": "portfolio-svc calls redis-cache (weight 0.2) and postgres (weight 0.8), and is called by orchestrator and web-app, so a cache TTL change there sits directly on the balance read path.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"redis-cache\",\"weight\":0.2}",
+   "source_call_id": "T3-03",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-028",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-029": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer consumes from portfolio-updates and calls aa-sync (weight 0.8); no change was recorded for either.",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T3-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-029",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-030": {
+   "kind": "FACT",
+   "claim": "[Past incident INC-0412, hypothesis only, not evidence for this incident] Late balance notifications were previously tied to a Redis-related cache stampede on portfolio-svc.",
+   "excerpt": "Redis restart evicted hot context, cache stampede on portfolio-svc",
+   "source_call_id": "T3-04",
+   "service": "portfolio-svc",
+   "ts": "2026-01-18T00:00:00Z",
+   "ref": null,
+   "id": "E-030",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-031": {
+   "kind": "ASSUMPTION",
+   "claim": "The 1800 s TTL could explain stale balances older than ten minutes, since cached holdings can persist up to 30 minutes. This needs confirmation from cache hit or staleness metrics.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-031",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-032": {
+   "kind": "FACT",
+   "claim": "portfolio-svc config change at 12:00 UTC raised the holdings cache TTL from 60s to 1800s, about 30 minutes before the 12:30 report.",
+   "excerpt": "HOLDINGS_CACHE_TTL_S 60 -> 1800",
+   "source_call_id": "T4-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-032",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-033": {
+   "kind": "FACT",
+   "claim": "portfolio-updates has aa-sync as its only listed producer.",
+   "excerpt": "{\"direction\":\"published_by\",\"name\":\"aa-sync\",\"weight\":null}",
+   "source_call_id": "T4-03",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-033",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-034": {
+   "kind": "FACT",
+   "claim": "portfolio-updates is consumed by portfolio-consumer.",
+   "excerpt": "{\"direction\":\"consumed_by\",\"name\":\"portfolio-consumer\",\"weight\":null}",
+   "source_call_id": "T4-03",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-034",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-035": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer consumes from portfolio-updates and makes a synchronous call to aa-sync with weight 0.8.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"aa-sync\",\"weight\":0.8}",
+   "source_call_id": "T4-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-035",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-036": {
+   "kind": "FACT",
+   "claim": "broker-gateway is called by order-router (weight 0.8) and orchestrator (weight 0.3). Its result lists no queue publish edges.",
+   "excerpt": "{\"direction\":\"called_by\",\"name\":\"order-router\",\"weight\":0.8}",
+   "source_call_id": "T4-04",
+   "service": "broker-gateway",
+   "ts": null,
+   "ref": null,
+   "id": "E-036",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-037": {
+   "kind": "FACT",
+   "claim": "market-data deployed at 11:19 UTC with a dependency bump. It is not on the traced queue path.",
+   "excerpt": "dependency bump",
+   "source_call_id": "T4-01",
+   "service": "market-data",
+   "ts": "2026-03-30T11:19:00Z",
+   "ref": null,
+   "id": "E-037",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-038": {
+   "kind": "FACT",
+   "claim": "llm-gateway deployed at 11:20 UTC with a metrics label rename. It is not on the traced balance path.",
+   "excerpt": "metrics label rename",
+   "source_call_id": "T4-01",
+   "service": "llm-gateway",
+   "ts": "2026-03-30T11:20:00Z",
+   "ref": null,
+   "id": "E-038",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-039": {
+   "kind": "FACT",
+   "claim": "broker-gateway deployed at 11:27 UTC with a log-level tweak.",
+   "excerpt": "log level tweak",
+   "source_call_id": "T4-01",
+   "service": "broker-gateway",
+   "ts": "2026-03-30T11:27:00Z",
+   "ref": null,
+   "id": "E-039",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-040": {
+   "kind": "ASSUMPTION",
+   "claim": "A 1800s cache TTL means balances can lag by up to about 30 minutes, which fits the report of trades older than ten minutes not appearing. This is inferred from the TTL value and the symptom wording, not confirmed.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-040",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-041": {
+   "kind": "ASSUMPTION",
+   "claim": "The trade path from broker-gateway/order-router to portfolio-updates is not in the current graph, so the queue may be fed by aa-sync only, or the graph may be incomplete.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-041",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-042": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0412 (2026-01-18) has a similar symptom, late balance notifications, and names portfolio-svc and Redis cache eviction as the root cause. This is a hint to check, not a conclusion for the current incident.",
+   "excerpt": "\"summary\":\"Late balance notifications\",\"root_cause\":\"Redis restart evicted hot context, cache stampede on portfolio-svc\"",
+   "source_call_id": "T5-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-042",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-043": {
+   "kind": "FACT",
+   "claim": "INC-0412 was resolved by restarting Redis and pre-warming hot keys. The incident record does not say which signals first identified it.",
+   "excerpt": "\"fix\":\"Restarted redis and pre-warmed hot keys\"",
+   "source_call_id": "T5-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-043",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-044": {
+   "kind": "FACT",
+   "claim": "INC-0412 was returned again by the portfolio-updates queue search, so it is the only past incident matching the queue/consumer query.",
+   "excerpt": "\"id\":\"INC-0412\",\"date\":\"2026-01-18\",\"summary\":\"Late balance notifications\"",
+   "source_call_id": "T5-02",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-044",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-045": {
+   "kind": "FACT",
+   "claim": "The delayed trades / aa-sync / broker sync lag search returned no past incidents, so there is no precedent for aa-sync or broker sync lag in this data.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T5-03",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-045",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-046": {
+   "kind": "FACT",
+   "claim": "INC-0412 was returned by the cache staleness search, so the Redis/portfolio cache precedent is the one match for cache staleness.",
+   "excerpt": "\"root_cause\":\"Redis restart evicted hot context, cache stampede on portfolio-svc\"",
+   "source_call_id": "T5-04",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-046",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-047": {
+   "kind": "FACT",
+   "claim": "INC-0388 (2025-12-09) is a weaker match: account-aggregator data fetch failures for one bank, caused by bank-side FIP downtime and fixed by retry with backoff. It does not describe stale balances across users.",
+   "excerpt": "\"summary\":\"Account aggregator data fetch failures for one bank\",\"root_cause\":\"Bank-side FIP downtime\",\"fix\":\"Retried with backoff after the provider recovered\"",
+   "source_call_id": "T5-01",
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-047",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-048": {
+   "kind": "ASSUMPTION",
+   "claim": "INC-0388 most plausibly relates to aa-sync, since its summary describes account-aggregator fetches. The record does not name a service.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-048",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-049": {
+   "kind": "FACT",
+   "claim": "cache_staleness_s was 0.0 at every sample from 11:00 to 11:55, so it was not elevated before 12:00 at 5-minute resolution. This weakens the hint's premise that staleness predates the TTL change.",
+   "excerpt": "{\"ts\":\"2026-03-30T11:55:00Z\",\"value\":0.0}",
+   "source_call_id": "T6-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T11:55:00Z",
+   "ref": null,
+   "id": "E-049",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-050": {
+   "kind": "FACT",
+   "claim": "Staleness first became non-zero at the 12:00 sample, at 540 s, which is below 600 s. The earliest deviation is bracketed between 11:55 and 12:00.",
+   "excerpt": "{\"ts\":\"2026-03-30T12:00:00Z\",\"value\":540.0}",
+   "source_call_id": "T6-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-050",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-051": {
+   "kind": "FACT",
+   "claim": "Staleness first exceeded 600 s at the 12:05 sample, about 5 minutes after the 12:00 TTL change. The exact crossing time between 12:00 and 12:05 cannot be resolved at this step.",
+   "excerpt": "{\"ts\":\"2026-03-30T12:05:00Z\",\"value\":1440.0}",
+   "source_call_id": "T6-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:05:00Z",
+   "ref": null,
+   "id": "E-051",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-052": {
+   "kind": "FACT",
+   "claim": "Staleness hit the 1800 s ceiling at 12:10 and remained there through the last sample at 12:55, matching the new TTL value.",
+   "excerpt": "{\"ts\":\"2026-03-30T12:10:00Z\",\"value\":1800.0}",
+   "source_call_id": "T6-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:10:00Z",
+   "ref": null,
+   "id": "E-052",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-053": {
+   "kind": "FACT",
+   "claim": "Portfolio-svc served holdings from cache with entry age 180s at 12:00:22, the first cache-serve line in the window. Entry ages then increase in steps to 1800 s.",
+   "excerpt": "2026-03-30T12:00:22Z INFO portfolio-svc: serving holdings from cache, entry age 180s",
+   "source_call_id": "T6-03",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:22Z",
+   "ref": null,
+   "id": "E-053",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-054": {
+   "kind": "FACT",
+   "claim": "Entry age reached the 1800 s TTL ceiling in the logs by 12:09:18 and was still 1800 s in the last cache-serve line, at 12:59:50.",
+   "excerpt": "2026-03-30T12:09:18Z INFO portfolio-svc: serving holdings from cache, entry age 1800s",
+   "source_call_id": "T6-03",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:09:18Z",
+   "ref": null,
+   "id": "E-054",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-055": {
+   "kind": "FACT",
+   "claim": "Eleven holdings-cache misses were logged before 12:00 (11:03:02 to 11:57:28). Seven more followed after 12:00, 18 in total, so misses are sparse and their pre-12:00 baseline is unknown.",
+   "excerpt": "2026-03-30T11:03:02Z WARN portfolio-svc: cache miss for holdings key 136270",
+   "source_call_id": "T6-03",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T11:03:02Z",
+   "ref": null,
+   "id": "E-055",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-056": {
+   "kind": "FACT",
+   "claim": "Redis hit ratio over the window had a minimum of 0.908 and a mean of 0.975, with a last value of 0.995. This summary has no time series, so when any dip occurred cannot be seen.",
+   "excerpt": "\"metric\":\"hit_ratio\",\"stats\":{\"min\":0.908,\"max\":1.002,\"mean\":0.975,\"last\":0.995",
+   "source_call_id": "T6-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-056",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-057": {
+   "kind": "FACT",
+   "claim": "Redis evicted_keys was zero throughout the window, so there is no eviction signal. This weakens the INC-0412-style Redis-eviction hypothesis for this incident.",
+   "excerpt": "\"metric\":\"evicted_keys\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0",
+   "source_call_id": "T6-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-057",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-058": {
+   "kind": "FACT",
+   "claim": "Previous-day cache_staleness_s for 2026-03-29 10:30–13:00 returned no points, with stats all null, although missing is reported as 0. No prior-day comparison is available from this metric.",
+   "excerpt": "\"stats\":{\"min\":null,\"max\":null,\"mean\":null,\"last\":null,\"missing\":0},\"points\":[]",
+   "source_call_id": "T6-04",
+   "service": "portfolio-svc",
+   "ts": "2026-03-29T10:30:00Z",
+   "ref": null,
+   "id": "E-058",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-059": {
+   "kind": "FACT",
+   "claim": "A narrower previous-day query (2026-03-29 11:30–12:30) also returned no points. The empty result is not evidence that staleness was zero.",
+   "excerpt": "\"stats\":{\"min\":null,\"max\":null,\"mean\":null,\"last\":null,\"missing\":0},\"points\":[]",
+   "source_call_id": "T6-05",
+   "service": "portfolio-svc",
+   "ts": "2026-03-29T11:30:00Z",
+   "ref": null,
+   "id": "E-059",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-060": {
+   "kind": "ASSUMPTION",
+   "claim": "An entry age of 180 s at 12:00:22 is longer than the pre-change 60 s TTL. The entry was filled around 11:57 (after the 11:57:28 miss), so the new TTL may have applied before the logged 12:00 change, or the config record time is off. This ordering is suspicious and unverified.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-060",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-061": {
+   "kind": "ASSUMPTION",
+   "claim": "Staleness jumps from 0 at 11:55 to 540 at 12:00, while logged entry ages climb gradually from 180 s. The metric and the logs may measure different quantities (for example, max staleness versus sampled entry age), so they are not directly reconciled.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-061",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-062": {
+   "kind": "ASSUMPTION",
+   "claim": "The TTL change is the most likely driver of the staleness rise at 12:00–12:10. Redis evictions are zero, so cache pressure does not explain it. A pre-12:00 TTL effect cannot be excluded at this resolution.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-062",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-063": {
+   "kind": "FACT",
+   "claim": "Update 583 was logged only as a WARN with no changes, at 11:17:47Z, the first of the recurring WARNs.",
+   "excerpt": "2026-03-30T11:17:47Z WARN portfolio-consumer: update 583 had no changes",
+   "source_call_id": "T7-01",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-30T11:17:47Z",
+   "ref": null,
+   "id": "E-063",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-064": {
+   "kind": "FACT",
+   "claim": "Update 464928 was logged only as a WARN with no changes, at 12:56:51Z, the last of the recurring WARNs.",
+   "excerpt": "2026-03-30T12:56:51Z WARN portfolio-consumer: update 464928 had no changes",
+   "source_call_id": "T7-02",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-30T12:56:51Z",
+   "ref": null,
+   "id": "E-064",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-065": {
+   "kind": "FACT",
+   "claim": "In the 11:17 minute, portfolio-consumer logged a 'processed' line for a different update (757632) at 11:17:08Z, but no 'processed' line for update 583, only the no-changes WARN at 11:17:47Z.",
+   "excerpt": "2026-03-30T11:17:08Z INFO portfolio-consumer: processed portfolio update 757632",
+   "source_call_id": "T7-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-30T11:17:08Z",
+   "ref": null,
+   "id": "E-065",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-066": {
+   "kind": "FACT",
+   "claim": "A postgres INFO search for 'holdings' over 11:00-13:00 returned no lines, so no holdings write was logged in that window.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T7-03",
+   "service": "postgres",
+   "ts": null,
+   "ref": null,
+   "id": "E-066",
+   "author": "observability",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-067": {
+   "kind": "FACT",
+   "claim": "A postgres DEBUG search for 'update' over 11:15-11:20 returned no lines, so no write was logged around update 583's onset.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T7-05",
+   "service": "postgres",
+   "ts": "2026-03-30T11:15:00Z",
+   "ref": null,
+   "id": "E-067",
+   "author": "observability",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-068": {
+   "kind": "ASSUMPTION",
+   "claim": "The 'had no changes' path probably skips the postgres write, so the update may not have changed holdings. This is inferred from the log wording and the missing write line and is not verified.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-068",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-069": {
+   "kind": "ASSUMPTION",
+   "claim": "Because update 583 has no processed line and no postgres write, the consumer may have discarded a real trade rather than applying it. This is unverified and needs payload contents and the affected account's holdings rows.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-069",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-070": {
+   "kind": "FACT",
+   "claim": "aa-sync publishes to portfolio-updates; this is the only publish edge into the queue for aa-sync.",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T8-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-070",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-071": {
+   "kind": "FACT",
+   "claim": "aa-sync's listed outbound calls include postgres only (weight 0.7); no call edge from aa-sync to broker-gateway or order-router appears.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"postgres\",\"weight\":0.7}",
+   "source_call_id": "T8-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-071",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-072": {
+   "kind": "FACT",
+   "claim": "aa-sync is called by portfolio-consumer with weight 0.8, so the consumer depends synchronously on aa-sync while also consuming aa-sync's publishes.",
+   "excerpt": "{\"direction\":\"called_by\",\"name\":\"portfolio-consumer\",\"weight\":0.8}",
+   "source_call_id": "T8-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-072",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-073": {
+   "kind": "FACT",
+   "claim": "order-router calls broker-gateway with weight 0.8 and does not publish to any queue in this result.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"broker-gateway\",\"weight\":0.8}",
+   "source_call_id": "T8-02",
+   "service": "order-router",
+   "ts": null,
+   "ref": null,
+   "id": "E-073",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-074": {
+   "kind": "FACT",
+   "claim": "portfolio-updates has aa-sync as its only publisher and portfolio-consumer as its only consumer.",
+   "excerpt": "{\"direction\":\"published_by\",\"name\":\"aa-sync\",\"weight\":null}",
+   "source_call_id": "T8-03",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-074",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-075": {
+   "kind": "FACT",
+   "claim": "broker-gateway deployed at 11:27 UTC with a log-level tweak; this is the only deploy for broker-gateway in the window, and no aa-sync or order-router change is listed.",
+   "excerpt": "\"ts\":\"2026-03-30T11:27:00Z\",\"kind\":\"deploy\",\"service\":\"broker-gateway\",\"ref\":\"broker-gateway-00883\",\"note\":\"log level tweak\"",
+   "source_call_id": "T8-04",
+   "service": "broker-gateway",
+   "ts": "2026-03-30T11:27:00Z",
+   "ref": null,
+   "id": "E-075",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-076": {
+   "kind": "FACT",
+   "claim": "The change query for 11:00-13:00 UTC returned four records with no truncation, so no aa-sync or order-router change appears in the window.",
+   "excerpt": "\"total\":4,\"truncated\":false",
+   "source_call_id": "T8-04",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-076",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-077": {
+   "kind": "FACT",
+   "claim": "portfolio-svc config change at 12:00 UTC raised the holdings cache TTL from 60 to 1800 seconds. It is on the balance read path, upstream of the portfolio-updates consumer chain, and is outside my T8 scope.",
+   "excerpt": "\"ts\":\"2026-03-30T12:00:00Z\",\"kind\":\"config\",\"service\":\"portfolio-svc\",\"ref\":\"cfg-holdings-cache-ttl\",\"note\":\"HOLDINGS_CACHE_TTL_S 60 -> 1800\"",
+   "source_call_id": "T8-04",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-077",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-078": {
+   "kind": "ASSUMPTION",
+   "claim": "Trades probably reach aa-sync through a path not present in the graph (for example, broker-gateway feeding aa-sync via a non-listed edge or queue), or the graph is incomplete. This cannot be confirmed from the topology alone.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-078",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-079": {
+   "kind": "ASSUMPTION",
+   "claim": "The aa-sync to portfolio-consumer loop (publish to portfolio-updates, then synchronous call back to aa-sync) may mean that a delay in aa-sync slows the portfolio-updates feed as well as the consumer. This is inferred from the edges and has not been tested.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-079",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-080": {
+   "kind": "FACT",
+   "claim": "Staleness was 0.0 at 11:17, inside the 11:03-11:17 window the task asked about, so it was not elevated there.",
+   "excerpt": "{\"ts\":\"2026-03-30T11:17:00Z\",\"value\":0.0}",
+   "source_call_id": "T9-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T11:17:00Z",
+   "ref": null,
+   "id": "E-080",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-081": {
+   "kind": "FACT",
+   "claim": "Staleness was 0.0 at the start of the window (11:00) and at 11:59, the minute before the rise.",
+   "excerpt": "{\"ts\":\"2026-03-30T11:59:00Z\",\"value\":0.0}",
+   "source_call_id": "T9-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T11:59:00Z",
+   "ref": null,
+   "id": "E-081",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-082": {
+   "kind": "FACT",
+   "claim": "Staleness rose from 0 to 180 s at the first minute after 12:00, the start of the increase.",
+   "excerpt": "{\"ts\":\"2026-03-30T12:00:00Z\",\"value\":180.0}",
+   "source_call_id": "T9-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-082",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-083": {
+   "kind": "FACT",
+   "claim": "Staleness reached the 1800 s ceiling at 12:09 and stayed there for the rest of the window.",
+   "excerpt": "{\"ts\":\"2026-03-30T12:09:00Z\",\"value\":1800.0}",
+   "source_call_id": "T9-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:09:00Z",
+   "ref": null,
+   "id": "E-083",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-084": {
+   "kind": "FACT",
+   "claim": "Summary stats match the series: minimum 0.0, maximum 1800.0, last 1800.0, no missing points.",
+   "excerpt": "\"stats\":{\"min\":0.0,\"max\":1800.0,\"mean\":832.5,\"last\":1800.0,\"missing\":0}",
+   "source_call_id": "T9-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-084",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-085": {
+   "kind": "ASSUMPTION",
+   "claim": "The steady +180 s per minute ramp from 12:00 to 12:09 looks like staleness growing with wall-clock time since the last holdings refresh, which means no refresh happened after 12:00. This is inferred from the shape of the series and is not confirmed by any log.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-085",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-086": {
+   "kind": "FACT",
+   "claim": "portfolio-svc has a config change at 12:00:00Z that changes the holdings cache TTL from 60 to 1800 seconds.",
+   "excerpt": "HOLDINGS_CACHE_TTL_S 60 -> 1800",
+   "source_call_id": "T10-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-086",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-087": {
+   "kind": "FACT",
+   "claim": "The portfolio-svc config change record has no source or URL attached, and it is the only change returned for portfolio-svc in the 11:00-13:00 window across deploy, config, migration and flag kinds.",
+   "excerpt": "\"total\":1,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T10-01",
+   "service": "portfolio-svc",
+   "ts": "2026-03-30T12:00:00Z",
+   "ref": null,
+   "id": "E-087",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-088": {
+   "kind": "FACT",
+   "claim": "redis-cache has no recorded changes of any kind (deploy, config, migration, flag) in the 11:00-13:00 window, so no Redis-side configuration change is recorded for holdings keys.",
+   "excerpt": "\"items\":[],\"total\":0",
+   "source_call_id": "T10-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-088",
+   "author": "dependency",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-089": {
+   "kind": "ASSUMPTION",
+   "claim": "The TTL change is a single service-level config value, so it probably applies to all portfolio-svc instances, but the change record has no instance field to confirm per-instance rollout or reload.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-089",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-090": {
+   "kind": "ASSUMPTION",
+   "claim": "Holdings keys in Redis take their TTL from portfolio-svc's HOLDINGS_CACHE_TTL_S setting at write time, so keys written after 12:00 should carry a 1800 s TTL. Keys written before 12:00 would keep the old TTL until they expire or are rewritten. This is inferred and not checked against Redis.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-090",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "The 12:00 UTC change that raised HOLDINGS_CACHE_TTL_S on portfolio-svc from 60 s to 1800 s lets the holdings cache serve entries for up to 30 minutes, so balance reads omit trades older than ten minutes even though the write path works.",
+   "component": "portfolio-svc",
+   "cause_type": "config_change_cache_ttl_too_long",
+   "supporting": [
+    "E-082",
+    "E-083",
+    "E-053",
+    "E-054",
+    "E-086",
+    "E-028",
+    "E-057"
+   ],
+   "contradicting": [
+    "E-060",
+    "E-061"
+   ],
+   "compatible_with": [
+    "H2",
+    "H3"
+   ],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "portfolio-consumer treats some portfolio-updates messages as 'no changes' and skips them, so real trade changes never reach postgres and balances stay stale at the source.",
+   "component": "portfolio-consumer",
+   "cause_type": "updates_dropped_as_noop",
+   "supporting": [
+    "E-006",
+    "E-065"
+   ],
+   "contradicting": [
+    "E-016",
+    "E-004",
+    "E-018",
+    "E-081",
+    "E-015"
+   ],
+   "compatible_with": [
+    "H1",
+    "H3"
+   ],
+   "status": "active"
+  },
+  "H3": {
+   "id": "H3",
+   "statement": "aa-sync, the only listed producer of portfolio-updates, publishes stale or incomplete trade data, or trades from broker-gateway and order-router never reach it, so a healthy downstream pipeline is fed old data.",
+   "component": "aa-sync",
+   "cause_type": "upstream_sync_stale_data",
+   "supporting": [
+    "E-033",
+    "E-074"
+   ],
+   "contradicting": [
+    "E-013",
+    "E-076"
+   ],
+   "compatible_with": [
+    "H1",
+    "H2"
+   ],
+   "status": "active"
+  }
+ },
+ "tasks": {
+  "T1": {
+   "id": "T1",
+   "agent": "observability",
+   "goal": "Establish the timeline of the stale-balance problem: when did portfolio data first stop reflecting new trades? Collect error rates, latency and log anomalies for portfolio-svc, portfolio-consumer, broker-gateway, order-router and aa-sync from about 2 hours before the first user report until now, and identify the earliest point where behavior deviates from baseline.",
+   "hints": [
+    "Compare against the same window on previous days",
+    "Look for the first error or warning log lines per service",
+    "Check whether trade execution (order-router, broker-gateway) is still succeeding while only the portfolio view is stale"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "Portfolio-side warnings appear before the 12:30 report: portfolio-svc logs holdings cache misses from 11:03:02Z, and portfolio-consumer logs 'update ... had no changes' warnings from 11:17:47Z, about 20 in the window. Metrics show cache_staleness_s peaking at 1800 with last=1800 and mean 832.5, but there are no time points, so the onset of staleness is unknown. No ERROR-level lines and no abnormal err_rate appear for these services, and rabbitmq looks healthy. Trade execution (order-router, broker-gateway) and baselines from previous days were not checked.",
+   "error": null
+  },
+  "T2": {
+   "id": "T2",
+   "agent": "observability",
+   "goal": "Examine the portfolio-updates queue on rabbitmq: queue depth, publish rate vs consume rate, consumer count, unacked messages, redelivery and dead-letter counts, and message age over time. Also check portfolio-consumer health (restarts, crashes, processing time per message, exceptions) and compare with inbound-msgs and outbound-msgs to see if the problem is isolated to portfolio-updates.",
+   "hints": [
+    "Determine whether messages are not being published, not being consumed, or consumed but failing to write",
+    "Check postgres write latency, locks and connection pool saturation from portfolio-consumer",
+    "Check redis-cache hit rate, key TTLs and evictions for portfolio/balance keys, since stale reads could come from the cache"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The portfolio-updates pipeline looks largely healthy at the summary level. Queue depth stayed near zero (mean 0.064, max 1.283, last 0.0), publish rate (mean 40.1/s) roughly matched consume rate (mean 46.0/s), there were 3 consumers throughout, and the DLQ was empty. Postgres showed no pool waiting and latency near 8 ms. The only WARN lines from portfolio-consumer are 20 'update N had no changes' messages, which could mean updates are being processed as no-ops, but I have not verified that. I could not establish a stall or write failure, and I did not use time-series points, so onset timing is unknown.",
+   "error": null
+  },
+  "T3": {
+   "id": "T3",
+   "agent": "dependency",
+   "goal": "List every change of any kind in the 24 hours before the first stale-balance report: deploys, config changes, environment variable or secret changes, database migrations, feature flag flips, cache settings, rabbitmq topology or policy changes, scaling or infrastructure changes, and broker or account-aggregator credential or API changes. Give exact timestamps and the services affected, and flag those closest to the onset of the problem.",
+   "hints": [
+    "Cover portfolio-svc, portfolio-consumer, broker-gateway, order-router, aa-sync, redis-cache, postgres, rabbitmq",
+    "Do not limit to deploys; include flags, config and migrations",
+    "Include changes made by third parties such as broker API version or rate limit changes if recorded"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "In the 24 hours before the 12:30 UTC report, get_changes (all kinds, unfiltered) recorded 4 changes. The one closest to onset is a config change on portfolio-svc at 12:00:00Z that raised HOLDINGS_CACHE_TTL_S from 60 to 1800, which would plausibly let cached holdings stay stale for up to 30 minutes. The three earlier changes are deploys on market-data, llm-gateway and broker-gateway between 11:19 and 11:27, which look unrelated to balance caching. No migrations, flag flips, rabbitmq, redis-cache, postgres, order-router, aa-sync or broker credential/API changes were recorded.",
+   "error": null
+  },
+  "T4": {
+   "id": "T4",
+   "agent": "dependency",
+   "goal": "Map the service dependencies and queue links relevant to balance display: trace the path from a trade at broker-gateway/order-router through the portfolio-updates queue to portfolio-consumer, postgres and redis-cache, then to portfolio-svc and the orchestrator/wa-webhook/msg-delivery response path. Identify producers and consumers of each queue, shared resources (postgres, redis-cache, rabbitmq), and upstream sources such as aa-sync and market-data, so symptoms can be separated from causes.",
+   "hints": [
+    "Note which components cache balances and with what TTL",
+    "Identify where each service could silently drop or delay an update",
+    "Note whether auth-kyc or llm-gateway sit in the balance read path"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The only publisher of portfolio-updates in the graph is aa-sync, and broker-gateway shows no queue edges, so the trade path from broker-gateway/order-router to the queue is not confirmed. The strongest candidate is a portfolio-svc config change at 12:00 UTC that raised HOLDINGS_CACHE_TTL_S from 60 to 1800, a 30-minute TTL that would fit staleness beyond ten minutes, but portfolio-svc's place in the read path is unverified. The deploys at 11:19, 11:20 and 11:27 look less related to the symptom.",
+   "error": null
+  },
+  "T5": {
+   "id": "T5",
+   "agent": "dependency",
+   "goal": "Search past incidents for similar symptoms: stale balances or portfolio data, delayed trades, portfolio-updates queue backlog or stalled consumers, cache staleness, and aa-sync or broker sync lag. Summarize each incident's symptoms, what was found, and how it was resolved, treating them only as hints to check, not conclusions.",
+   "hints": [
+    "Note how similar the symptoms and affected services are to this incident",
+    "Record which signals identified the issue in earlier cases"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "Four incident searches returned two distinct past incidents and no matches for queue backlog or broker sync lag. INC-0412 (2026-01-18, \"Late balance notifications\") is the closest match: its root cause was a Redis restart that evicted hot context and caused a cache stampede on portfolio-svc, fixed by restarting Redis and pre-warming hot keys. INC-0388 (2025-12-09) is a weaker match: account-aggregator fetch failures caused by bank-side downtime. Both are hypotheses to test against this incident's data, not conclusions.",
+   "error": null
+  },
+  "T6": {
+   "id": "T6",
+   "agent": "observability",
+   "goal": "Query time-series (step 5 min) for portfolio-svc cache_staleness_s, redis-cache hit rate/evictions, and portfolio-svc cache-hit/miss logs from 10:30 to 13:00 UTC. Report when staleness first exceeds 600s relative to 12:00, and whether it was already elevated before the TTL change. Also compare with the same window on the previous day.",
+   "hints": [
+    "The symptom onset is not located. Cache misses (11:03) and 'no changes' warnings (11:17) predate the 12:00 TTL change, and cache_staleness_s has only summary stats. A TTL raised at 12:00 cannot explain staleness that began earlier, and a 1800s TTL only shows staleness after entries are cached under the new setting. If staleness predates 12:00, the TTL is at most an aggravator."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C1",
+   "status": "done",
+   "attempts": 1,
+   "summary": "cache_staleness_s was 0.0 at every 5-minute sample from 11:00 to 11:55 UTC, so it was not elevated before the 12:00 holdings-TTL change at this resolution. It was 540 at 12:00, first exceeded 600 at 12:05 (1440), and reached the 1800 s ceiling by 12:10 and stayed there through 12:55. Portfolio-svc logs show served entry ages rising from 180 s at 12:00:22 to 1800 s by 12:09:18, which fits the 1800 s TTL. Redis shows no eviction signal, and no prior-day staleness data was returned, so the previous-day comparison could not be made.",
+   "error": null
+  },
+  "T7": {
+   "id": "T7",
+   "agent": "observability",
+   "goal": "Pull portfolio-consumer logs around update ids 583 and 464928 at DEBUG/INFO level, including what the update payload contained and whether a postgres write occurred. Then compare the postgres holdings row updated_at for an affected account against the latest trade time, to show whether the DB itself is stale or only the cache.",
+   "hints": [
+    "The 20 'update N had no changes' WARNs are unexplained: they began 11:17, before the TTL change, at roughly 1 per 5 minutes against about 40 msg/s, so they may be benign. Nobody has checked whether the affected updates correspond to real trades or whether postgres rows actually lag. Without this, H2 cannot be separated from H1."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C2",
+   "status": "done",
+   "attempts": 1,
+   "summary": "Update 583 (11:17:47Z) and update 464928 (12:56:51Z) each appear once in portfolio-consumer logs, as WARN 'had no changes'. Neither log line includes payload content, and no 'processed' line exists for update 583 in the 11:17 DEBUG window, which suggests a no-op path. No postgres write was logged for holdings or update in the searched windows, but absence in logs is not proof of no write. I could not compare holdings updated_at against trade times because my tools return only logs and metrics, so whether the DB or only the cache is stale remains unresolved.",
+   "error": null
+  },
+  "T8": {
+   "id": "T8",
+   "agent": "dependency",
+   "goal": "Query err_rate, latency and logs for aa-sync, order-router and broker-gateway over 11:00-13:00 UTC, and trace how a trade reaches portfolio-updates (topology edges for aa-sync callers and publishers, any other queues). Report the lag between trade execution timestamp and portfolio-updates publish for a sample of recent trades.",
+   "hints": [
+    "aa-sync, order-router and broker-gateway were never queried for metrics or logs, and the graph shows no trade path from broker-gateway/order-router to portfolio-updates. We cannot tell whether trades reach aa-sync or whether the upstream feed is delayed, which would make both the cache and the consumer innocent."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C3",
+   "status": "done",
+   "attempts": 1,
+   "summary": "The topology shows aa-sync as the only producer of portfolio-updates, consumed by portfolio-consumer, which in turn makes a synchronous call back to aa-sync (weight 0.8). order-router calls broker-gateway (weight 0.8), but neither aa-sync nor order-router has an edge to broker-gateway or a queue, so the trade path from execution to aa-sync is not visible in the graph. I did not query err_rate, latency or logs for aa-sync, order-router or broker-gateway, and I have no trade execution or publish timestamps, so the trade-to-publish lag could not be measured.",
+   "error": null
+  },
+  "T9": {
+   "id": "T9",
+   "agent": "observability",
+   "goal": "Time series of portfolio-svc cache_staleness_s at 1-minute steps from 11:00 to 13:00: did it jump from near 0 to a ceiling of 1800 after 12:00, or was it already elevated at 11:03-11:17?",
+   "hints": [],
+   "depends_on": [],
+   "origin": "reasoning",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "portfolio-svc cache_staleness_s was flat at 0.0 for every minute from 11:00 to 11:59, including 11:03-11:17, so it was not elevated before 12:00. It began rising at 12:00 by 180 s per minute, reached the 1800 s ceiling at 12:09, and stayed there through 12:59. This is a jump starting at 12:00, not a pre-existing elevation.",
+   "error": null
+  },
+  "T10": {
+   "id": "T10",
+   "agent": "dependency",
+   "goal": "Was the TTL change actually applied to every portfolio-svc instance, and did the Redis key TTLs for holdings keys change after 12:00?",
+   "hints": [],
+   "depends_on": [],
+   "origin": "reasoning",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The config change record shows portfolio-svc's holdings cache TTL was changed from 60 to 1800 at 12:00:00Z (ref cfg-holdings-cache-ttl). The record is service-level and does not show per-instance rollout, so it cannot confirm the change reached every portfolio-svc instance. redis-cache has no change records in the window, so the TTL change was not recorded as a Redis-side configuration change. Whether the live Redis holdings key TTLs changed after 12:00 is not verified by these records.",
+   "error": null
+  }
+ },
+ "challenges": {
+  "C1": {
+   "target": "H1",
+   "kind": "ordering_or_clock",
+   "objection": "The symptom onset is not located. Cache misses (11:03) and 'no changes' warnings (11:17) predate the 12:00 TTL change, and cache_staleness_s has only summary stats. A TTL raised at 12:00 cannot explain staleness that began earlier, and a 1800s TTL only shows staleness after entries are cached under the new setting. If staleness predates 12:00, the TTL is at most an aggravator.",
+   "requested_check": "Query time-series (step 5 min) for portfolio-svc cache_staleness_s, redis-cache hit rate/evictions, and portfolio-svc cache-hit/miss logs from 10:30 to 13:00 UTC. Report when staleness first exceeds 600s relative to 12:00, and whether it was already elevated before the TTL change. Also compare with the same window on the previous day.",
+   "agent": "observability",
+   "id": "C1",
+   "resolved": true
+  },
+  "C2": {
+   "target": "H2",
+   "kind": "weak_evidence",
+   "objection": "The 20 'update N had no changes' WARNs are unexplained: they began 11:17, before the TTL change, at roughly 1 per 5 minutes against about 40 msg/s, so they may be benign. Nobody has checked whether the affected updates correspond to real trades or whether postgres rows actually lag. Without this, H2 cannot be separated from H1.",
+   "requested_check": "Pull portfolio-consumer logs around update ids 583 and 464928 at DEBUG/INFO level, including what the update payload contained and whether a postgres write occurred. Then compare the postgres holdings row updated_at for an affected account against the latest trade time, to show whether the DB itself is stale or only the cache.",
+   "agent": "observability",
+   "id": "C2",
+   "resolved": true
+  },
+  "C3": {
+   "target": "H3",
+   "kind": "missing_coverage",
+   "objection": "aa-sync, order-router and broker-gateway were never queried for metrics or logs, and the graph shows no trade path from broker-gateway/order-router to portfolio-updates. We cannot tell whether trades reach aa-sync or whether the upstream feed is delayed, which would make both the cache and the consumer innocent.",
+   "requested_check": "Query err_rate, latency and logs for aa-sync, order-router and broker-gateway over 11:00-13:00 UTC, and trace how a trade reaches portfolio-updates (topology edges for aa-sync callers and publishers, any other queues). Report the lag between trade execution timestamp and portfolio-updates publish for a sample of recent trades.",
+   "agent": "dependency",
+   "id": "C3",
+   "resolved": true
+  }
+ },
+ "gaps": [],
+ "notes": [
+  "No previous-day or baseline comparison was run, so 'deviation from baseline' cannot be confirmed.",
+  "query_metrics returned summary stats only (no points), so the first time staleness rose above normal is not located; the earliest log anomaly (11:03:02Z) is only a candidate onset.",
+  "order-router, broker-gateway and aa-sync were not queried, so it is unknown whether trade execution is succeeding while the portfolio view is stale.",
+  "No portfolio-updates queue metrics (depth, consumers, redeliveries, dead-letter) were pulled, so the consumer's intake was not verified.",
+  "Tool-call budget was exhausted after five calls, so further narrowing of the window or service set was not possible.",
+  "No time-series points were requested (step_min was null), so I could not locate the earliest deviation or correlate it with the 10-minute staleness onset.",
+  "No queue age or unacked metric was present in the summary, so I could not measure message age or unacked counts.",
+  "Redis-cache hit rate, TTLs and evictions for portfolio/balance keys were not checked, so cache-driven staleness is untested.",
+  "inbound-msgs and outbound-msgs queues were not checked, so I cannot say whether the problem is isolated to portfolio-updates.",
+  "portfolio-consumer restarts, crashes, exceptions and per-message processing time were not checked beyond the aggregate latency; postgres write-specific locks were not checked.",
+  "Call budget was reached (5 calls), so these checks were not run.",
+  "get_changes was called once with all kinds and no service filter, returned total 4 with truncated=false and partial=false. That covers recorded changes only, so unrecorded changes (secrets, env vars, rabbitmq policy, scaling, third-party broker or AA API changes) cannot be ruled out.",
+  "No dedicated changes were returned for rabbitmq, redis-cache, postgres, order-router or aa-sync. The absence is not proof of no change, and I did not query these services individually because the call budget was used.",
+  "Dependency calls covered only portfolio-consumer and portfolio-svc. The topology of rabbitmq, order-router and aa-sync callers was not checked.",
+  "I did not confirm whether the TTL change was actually deployed or applied to all portfolio-svc instances; that needs the config system or observability data.",
+  "The past incident INC-0412 was returned by a keyword search and may not apply to this incident.",
+  "Dependencies for portfolio-svc, postgres, redis-cache, order-router, orchestrator, wa-webhook and msg-delivery were not queried, so the read path from the cache to the user response is unmapped.",
+  "Redis cache TTLs and any other caches holding balances were not checked.",
+  "Whether the 12:00 config change was actually applied to the reading path is unverified; no logs or metrics came from my tools.",
+  "auth-kyc and llm-gateway are not shown in the balance read path by the edges I retrieved, but I did not query their dependencies to confirm.",
+  "No queue drop or delay signals were available; get_changes covered deploy/config/migration/flag only and returned no migrations.",
+  "Past incidents were not searched, so no historical comparison is available.",
+  "Both matching incidents have source and url set to null, so the original write-ups could not be checked.",
+  "Incident records give dates but no times, so they cannot be lined up against the 11:00-13:00 UTC incident window.",
+  "The search results do not record which detection signals identified past incidents, so that part of the hint could not be filled in.",
+  "Only 2 distinct past incidents matched across 4 searches, and nothing matched queue backlog, consumer stall or broker sync lag. Absence in past incidents is not proof those causes are ruled out.",
+  "Past incidents are hypotheses only. No current telemetry, change records or dependency edges were checked as part of this task.",
+  "Previous-day comparison is unavailable: cache_staleness_s for 2026-03-29 returned empty points (T6-04, T6-05) and no prior-day cache hit/miss logs were queried. Empty results are not treated as zero.",
+  "redis-cache metrics came back as window summaries only (points null), so hit-ratio dips cannot be timed. hit_ratio max 1.002 exceeds 1, which suggests a metric artifact.",
+  "Staleness is sampled every 5 minutes, so the exact time it crossed 600 s (between 12:00 and 12:05) is unresolved.",
+  "The log query only matched the substring 'cache' on portfolio-svc. No cache invalidation or refresh logs on trade events were checked, and redis-cache logs were not queried, so whether trades trigger invalidation is unverified.",
+  "No pre-12:00 hit-ratio or miss-rate baseline is available, so it is unknown whether 11 misses in 11:03–11:57 is elevated.",
+  "Call budget was exhausted after five calls, so the pre-change and prior-day comparisons remain incomplete.",
+  "Update payloads are not logged at DEBUG/INFO, so I could not confirm what the 583 or 464928 messages contained or whether they carried trade changes.",
+  "No account identifier was available, so I could not read holdings updated_at from postgres and compare it with the latest trade time. My tools return only logs and metrics, so a SQL row check is outside my reach.",
+  "Postgres log searches returned nothing for holdings or update, which may be a logging gap rather than proof that no write occurred.",
+  "No trade timestamps were pulled from broker-gateway, order-router or aa-sync, so the trade-to-update lag is unknown.",
+  "Call budget (5 calls) is used up, so I could not query further windows for other affected updates or accounts.",
+  "err_rate, latency and logs for aa-sync, order-router and broker-gateway were not queried; the 4-call budget for this turn was already used by the topology and change calls.",
+  "No trade execution timestamps or portfolio-updates publish timestamps were retrieved, so the trade-to-publish lag for a sample of recent trades was not computed.",
+  "broker-gateway's outbound edges were not retrieved, so the broker-to-aa-sync path (or a broker-side feed delay) remains unverified.",
+  "The change query covered deploy, config, migration and flag records, and returned four items. Whether those four are complete for the three services depends on the change feed, which was not cross-checked.",
+  "The metric is sampled at 1-minute steps, so the exact onset within 12:00 and any sub-minute behaviour are not resolved.",
+  "The series shows when staleness rose but not why. I did not query logs for cache refresh or TTL events, so the link to the 12:00 config change rests on timing only.",
+  "I did not check the configured holdings TTL value or per-user versus aggregate scope of the staleness metric, so I cannot confirm that the ceiling corresponds to the 1800 s TTL.",
+  "No per-instance rollout or config-reload data for portfolio-svc, so it is unknown whether every instance is running with 1800 s.",
+  "Live Redis key TTLs for holdings keys were not inspected, so whether they changed after 12:00 is unverified. The change records only show the portfolio-svc config change, not the TTLs actually set on keys.",
+  "The change record has no source or URL, so the config store and deploy path were not confirmed.",
+  "Dependency graph for redis-cache was not queried, so the exact set of services writing holdings keys is not confirmed.",
+  "Past incidents were not searched again for this sub-question; INC-0412 is only a hint and is not used as evidence here."
+ ],
+ "rejected": []
+}

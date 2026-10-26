@@ -1,0 +1,239 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Balances are stale because portfolio-consumer cannot get through aa-sync. Its calls fail with HTTP 503, so the portfolio-updates queue backs up (depth reached about 1002, consume_rate fell to about 8.5 against a publish_rate of about 41). aa-sync's connection pool is saturated at 100 of ~100 connections with requests queued. The earliest deviation is progressively slower holdings_snapshot queries in aa-sync from 12:50 (171ms rising to 564ms), which precedes the pool exhaustion logs at 12:56. The most likely mechanism is slow DB queries holding connections until the pool is exhausted. No change explains this: aa-sync has none, and the three deploys are unrelated tweaks. The reason the holdings_snapshot queries slowed is not established, because postgres was not examined directly.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync's holdings_snapshot queries became progressively slower from about 12:50, holding DB connections longer until the pool saturated. aa-sync then returned 503s to portfolio-consumer, and portfolio-updates backed up, leaving balances stale.",
+   "component": "aa-sync",
+   "cause_type": "connection_pool_exhaustion_from_slow_queries",
+   "score": 7.125,
+   "confidence": 0.781,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "aa-sync logs show holdings_snapshot queries getting steadily slower from 12:50, before pool exhaustion appears",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "Slow query latency kept climbing to 564ms just before the pool exhaustion logs",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "aa-sync connection pool exhausted with requests queued",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "aa-sync metrics show pool saturation, high error rate and high latency",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "aa-sync err_rate peaked and was still near the peak at the end of the window",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "Queue is backing up: depth about 1002, consume_rate collapsed, publish_rate steady",
+     "evidence_ids": [
+      "E-008"
+     ]
+    },
+    {
+     "text": "consume_rate fell to a fraction of its peak",
+     "evidence_ids": [
+      "E-009"
+     ]
+    },
+    {
+     "text": "aa-sync depends on postgres and is called by portfolio-consumer, so failures flow from aa-sync to the consumer and queue",
+     "evidence_ids": [
+      "E-012"
+     ]
+    },
+    {
+     "text": "portfolio-consumer err_rate is elevated, consistent with being a downstream effect",
+     "evidence_ids": [
+      "E-013"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "Postgres degradation (or a holdings_snapshot table or index problem) is the underlying reason for the slow queries that drove H1. This was not examined directly.",
+   "component": "postgres",
+   "cause_type": "database_slow_queries",
+   "score": 0.887,
+   "confidence": 0.307,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "aa-sync logs show holdings_snapshot queries getting steadily slower from 12:50, before pool exhaustion appears",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "aa-sync depends on postgres and is called by portfolio-consumer, so failures flow from aa-sync to the consumer and queue",
+     "evidence_ids": [
+      "E-012"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "A recent deploy (auth-kyc, web-app or market-data) caused the incident.",
+   "component": "web-app",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "No deploy, config, migration or flag changes on aa-sync in the 8 hours before the incident",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync logs show holdings_snapshot queries getting steadily slower from 12:50, before pool exhaustion appears",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "Slow query latency kept climbing to 564ms just before the pool exhaustion logs",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "aa-sync connection pool exhausted with requests queued",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "aa-sync metrics show pool saturation, high error rate and high latency",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "aa-sync err_rate peaked and was still near the peak at the end of the window",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "Queue is backing up: depth about 1002, consume_rate collapsed, publish_rate steady",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "consume_rate fell to a fraction of its peak",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "No deploy, config, migration or flag changes on aa-sync in the 8 hours before the incident",
+   "evidence_ids": [
+    "E-010"
+   ]
+  },
+  {
+   "text": "aa-sync depends on postgres and is called by portfolio-consumer, so failures flow from aa-sync to the consumer and queue",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "portfolio-consumer err_rate is elevated, consistent with being a downstream effect",
+   "evidence_ids": [
+    "E-013"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why holdings_snapshot queries began slowing at about 12:50 (query plan, locks, table growth, or postgres resource contention); postgres metrics and logs were not queried.",
+  "portfolio-consumer 503s begin at 12:51:50, about 4 minutes before the first aa-sync pool exhaustion log at 12:56:08; the cause of the early 503s (possibly pool pressure not yet logged) is not established.",
+  "The earliest onset of the metric deviation was not verified with point-level data; only summary stats were retrieved.",
+  "The ERROR log query was truncated (208 matches), so the full error picture after 13:02 was not reviewed."
+ ],
+ "actions": [
+  {
+   "text": "Mitigate aa-sync: restart or recycle instances to release stuck connections, and temporarily raise the pool size or add replicas, while watching postgres connection and load limits.",
+   "rationale": "The pool is saturated at 100 of ~100 and 503s persist; this relieves the immediate bottleneck and lets portfolio-updates drain (depth about 1002).",
+   "evidence_ids": [
+    "E-003",
+    "E-005",
+    "E-008"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Inspect postgres (active queries, locks, slow query log, connections, recent vacuum or plan changes) for the holdings_snapshot queries that began slowing at 12:50.",
+   "rationale": "Slow holdings_snapshot queries are the earliest deviation, and postgres health was not checked.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-012",
+    "E-014"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After recovery, confirm portfolio-updates drains with no DLQ growth or lost messages, and that redeliveries do not duplicate balance updates.",
+   "rationale": "Depth is high, consume_rate is low and redeliveries are elevated.",
+   "evidence_ids": [
+    "E-008",
+    "E-009"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerts on aa-sync query latency and pool_in_use saturation, add a connection or query timeout, and add a circuit breaker or backoff in portfolio-consumer.",
+   "rationale": "The slow-query degradation preceded pool exhaustion by about 6 minutes and went unalerted.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-013"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 21,
+  "tool_attempts": 21,
+  "llm_calls": 7,
+  "tokens_in": 50985,
+  "tokens_out": 14945,
+  "rounds": 0,
+  "elapsed_s": 139.2
+ },
+ "dropped_claims": 0
+}

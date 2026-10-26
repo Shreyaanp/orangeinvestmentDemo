@@ -1,0 +1,600 @@
+{
+ "status": "INCONCLUSIVE",
+ "status_reason": "top confidence 0.0 is below 0.4",
+ "summary": "The evidence does not establish a cause for the duplicate orders. order-router began logging 'idempotency key not found for retried webhook, treating as new order' at 14:10:11Z, and duplicate_orders rose from 0 to 5.4 in the 14:10 bucket and stayed elevated (18.0 at 15:05). Two candidate triggers exist: the 14:02 order-router dependency bump (deploy 00601) and the 14:07 redis-cache maxmemory cut. Neither is confirmed, and each has significant weak spots. The leading possibilities are the redis-cache eviction (H1) and the order-router dependency bump (H2), and slow broker-gateway responses (H3) could at most be a retry trigger paired with one of them. It is also unverified whether two broker orders were actually executed, as opposed to being treated as new by order-router.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The 14:07 redis-cache maxmemory cut (4gb to 1gb, allkeys-lru) caused mass eviction from 14:10, which dropped idempotency/dedupe keys so retried webhooks missed lookup and were treated as new orders. This is weak because the first eviction log trails the first duplicate warning, and order-router has no graph edge to redis-cache.",
+   "component": "redis-cache",
+   "cause_type": "config_change_eviction_of_dedupe_keys",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The 14:07 redis-cache config change cut maxmemory from 4gb to 1gb with allkeys-lru, shortly before the duplicates began.",
+     "evidence_ids": [
+      "E-022"
+     ]
+    },
+    {
+     "text": "Evictions began at 14:10 (evicted_keys 0 to 6000, then 12000 by 14:11) and memory_pct climbed from 60% to 97% over 14:09-14:11, so mass eviction was under way within the incident window.",
+     "evidence_ids": [
+      "E-043",
+      "E-044",
+      "E-086"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The first eviction log is at 14:10:35Z, after the first duplicate-path warning at 14:10:11Z, so eviction is not shown to precede the first duplicate. The one-minute metric bucket cannot resolve this.",
+     "evidence_ids": [
+      "E-045",
+      "E-116",
+      "E-092"
+     ]
+    },
+    {
+     "text": "order-router has no graph edge to redis-cache (only postgres and broker-gateway), and its logs show no redis lines, so it is not shown to use redis for dedupe. It is likely, though unverified, that its idempotency keys live in postgres.",
+     "evidence_ids": [
+      "E-023",
+      "E-081",
+      "E-051",
+      "E-123"
+     ]
+    },
+    {
+     "text": "The config change at 14:07 produced no step in memory_pct and no evictions until 14:10.",
+     "evidence_ids": [
+      "E-091"
+     ]
+    },
+    {
+     "text": "Even if it were involved, it is only an assumption that dedupe keys were among the evicted keys; the logs name no keys.",
+     "evidence_ids": [
+      "E-080",
+      "E-117"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The 14:02 order-router dependency bump (deploy 00601) changed idempotency-key generation or the retry client, so retried webhooks no longer match stored keys and are treated as new orders, which gives duplicates from about 14:10.",
+   "component": "order-router",
+   "cause_type": "bad_code_release_dependency_bump",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "order-router deploy 00601 (a 'dependency bump') went out at 14:02, and it is the only order-router change in the window, so any key-format or retry-client change would most likely sit there.",
+     "evidence_ids": [
+      "E-021",
+      "E-056",
+      "E-058"
+     ]
+    },
+    {
+     "text": "No idempotency miss lines appear before 14:10:11Z, so the misses start abruptly.",
+     "evidence_ids": [
+      "E-095"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The first miss comes about 8 minutes after the deploy, and the duplicate_orders metric was 0 until 14:10. A TTL or store-side change would fit the same timing, so the timing does not point to a key-format change at rollout.",
+     "evidence_ids": [
+      "E-001",
+      "E-104"
+     ]
+    },
+    {
+     "text": "order-router error rate and latency are flat, and no startup or restart lines appear in the window, so nothing marks a rollout event near the onset.",
+     "evidence_ids": [
+      "E-008",
+      "E-015",
+      "E-102"
+     ]
+    },
+    {
+     "text": "The change record has no diff or library name, so what changed is unknown.",
+     "evidence_ids": [
+      "E-055"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "Slow broker-gateway responses made an upstream caller or WhatsApp time out and resend the same message, producing the retried webhooks. This explains the retries but not why the dedupe lookup misses, so it is at most a trigger that pairs with H1 or H2.",
+   "component": "broker-gateway",
+   "cause_type": "slow_dependency_triggering_retries",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "wa-webhook webhook_retries_pct rose from 0 at 14:09 to 0.117 in the 14:10 bucket, plateauing at 0.35 by 14:12, which matches the onset of retries. broker-gateway also logged a slow response at 14:09:01Z.",
+     "evidence_ids": [
+      "E-059",
+      "E-060",
+      "E-016"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "No timeout or error lines appear in broker-gateway. wa-webhook logs show no redeliveries or response timeouts, and no repeated message IDs were enqueued.",
+     "evidence_ids": [
+      "E-016",
+      "E-017",
+      "E-062"
+     ]
+    },
+    {
+     "text": "Slow broker responses are sparse (14:05, 14:09, 14:13, 14:15), and none is tied to the retries.",
+     "evidence_ids": [
+      "E-063"
+     ]
+    },
+    {
+     "text": "Even if it caused retries, this does not explain why the dedupe lookup misses, so it is at most a trigger alongside H1 or H2.",
+     "evidence_ids": [
+      "E-020"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H4",
+   "statement": "Orchestrator re-processes redelivered inbound-msgs messages (at-least-once consumption) and issues a second broker-gateway call, creating duplicate orders independent of order-router dedupe.",
+   "component": "orchestrator",
+   "cause_type": "queue_redelivery_without_idempotency",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "broker-gateway has two synchronous callers, orchestrator and order-router, so a duplicate submission could arrive via either path.",
+     "evidence_ids": [
+      "E-034"
+     ]
+    },
+    {
+     "text": "It is possible that an at-least-once redelivery of inbound-msgs makes orchestrator issue a second broker call, but this is unverified.",
+     "evidence_ids": [
+      "E-036"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "RabbitMQ shows zero errors and flat latency, and there is no evidence of a redelivery storm.",
+     "evidence_ids": [
+      "E-018"
+     ]
+    },
+    {
+     "text": "orchestrator logs and metrics show no change at 14:10 (latency, rps, errors), and the orchestrator-to-order-router edge is inconsistent in the graph. DEBUG-level activity was not checked.",
+     "evidence_ids": [
+      "E-110",
+      "E-112",
+      "E-035"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "order-router duplicate_orders metric is 0.0 in every 5-minute bucket from 13:10 through 14:05 and first rises at 14:10:00Z to 5.4.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "order-router err_rate stays low (max 0.005) and latency_ms mean is 180.044, so the duplicates do not show as a general error spike.",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "order-router's error rate and latency stayed in a narrow band. The summary shows err_rate max 0.005 and latency_ms max 193.273, with no spike visible, which does not support a timeout-driven failure inside order-router.",
+   "evidence_ids": [
+    "E-015"
+   ]
+  },
+  {
+   "text": "broker-gateway logged a slow broker response at 14:09:01Z, about a minute before the first duplicate-treatment warning. Earlier slow responses were logged at 14:05:57Z. No timeout or error lines appeared at WARN and above in this window.",
+   "evidence_ids": [
+    "E-016"
+   ]
+  },
+  {
+   "text": "wa-webhook's only WARN lines in the 13:50-14:25Z window were health-probe messages about a missing signature header. None describe WhatsApp redeliveries or response timeouts, which weakens the webhook-redelivery hypothesis but does not rule it out.",
+   "evidence_ids": [
+    "E-017"
+   ]
+  },
+  {
+   "text": "RabbitMQ's error rate was zero for the whole window and its latency stayed between 1.865 and 2.11 ms. This does not support a queue-side failure or redelivery storm.",
+   "evidence_ids": [
+    "E-018"
+   ]
+  },
+  {
+   "text": "order-router deployed a 'dependency bump' at 14:02 UTC, about 8 minutes before the reported ~14:10 duplicate orders.",
+   "evidence_ids": [
+    "E-021"
+   ]
+  },
+  {
+   "text": "redis-cache configuration changed at 14:07 UTC: maxmemory reduced from 4gb to 1gb and eviction policy set to allkeys-lru. This is before the ~14:10 duplicates. If redis holds order dedupe or idempotency keys, eviction could drop them.",
+   "evidence_ids": [
+    "E-022"
+   ]
+  },
+  {
+   "text": "order-router's direct synchronous dependencies are broker-gateway (weight 0.8) and postgres (weight 0.3); web-app calls it (weight 0.5). No queue edges were returned for order-router, and redis-cache does not appear among its direct edges.",
+   "evidence_ids": [
+    "E-023"
+   ]
+  },
+  {
+   "text": "broker-gateway has two synchronous callers in the graph: orchestrator (0.3) and order-router (0.8). A duplicate submission reaching broker-gateway could come from either path.",
+   "evidence_ids": [
+    "E-034"
+   ]
+  },
+  {
+   "text": "orchestrator is listed as a caller of order-router (weight 0.3), but orchestrator's own dependency list does not include an order-router call. This edge is inconsistent across results.",
+   "evidence_ids": [
+    "E-035"
+   ]
+  },
+  {
+   "text": "redis-cache evicted_keys is 0.0 in the 14:09 bucket and jumps to 6000.0 in the 14:10 bucket, so evictions start at 14:10, not at 14:07.",
+   "evidence_ids": [
+    "E-043"
+   ]
+  },
+  {
+   "text": "evicted_keys reaches 12000.0 by the 14:11 bucket and stays there through 14:29, so it does not keep rising after 14:11.",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "The first redis-cache eviction log line is at 14:10:35Z, which is after the 14:10:11Z duplicate-path warnings from E-003, so eviction does not precede the first duplicate in these results.",
+   "evidence_ids": [
+    "E-045"
+   ]
+  },
+  {
+   "text": "order-router returned no INFO log lines containing 'redis' between 13:50 and 14:30, so the logs do not show which dedupe store order-router uses.",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "order-router deploy 00601 at 14:02 is recorded only as a 'dependency bump', with no source or url attached, so the changed library and diff are not available from change history.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "Querying all four change kinds for order-router from 13:10 to 15:10 returned only the single 14:02 deploy, with no config, migration or flag change for order-router in the window.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "wa-webhook webhook_retries_pct is at baseline 0.0 through 14:09 and first rises in the 14:10 bucket to 0.117.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "wa-webhook webhook_retries_pct reaches its plateau of 0.35 by 14:12 and stays there through 14:29.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "wa-webhook logged 31 INFO 'enqueued to inbound-msgs' lines from 13:50 to 14:30 (total 31, not truncated), and every message ID in them is distinct. The 14:10-14:14 lines also show no repeated IDs, so no re-enqueue of an already-enqueued message is logged.",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "broker-gateway logged two more slow-broker WARN lines in the window, at 14:13:48Z and 14:15:50Z. These are in addition to the 14:09:01Z line already recorded.",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "redis-cache's direct callers in the graph are orchestrator (weight 0.3) and portfolio-svc (weight 0.2). order-router is not listed as a caller of redis-cache.",
+   "evidence_ids": [
+    "E-081"
+   ]
+  },
+  {
+   "text": "redis-cache memory_pct was 60.02 in the 14:09 bucket, rose to 77.195 in the 14:10 bucket and reached 97.0 in the 14:11 bucket.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "The 14:07 redis-cache configuration change shows no step in memory_pct: values stayed near 57-59% from 14:06 to 14:08, and evicted_keys stayed at 0.0 from 14:05 to 14:09.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  },
+  {
+   "text": "The order-router idempotency-filtered query for 14:00:00-14:10:15Z returned exactly 3 lines, all misses, with none earlier than 14:10:11Z and no hit lines.",
+   "evidence_ids": [
+    "E-095"
+   ]
+  },
+  {
+   "text": "The 'start' search over 14:00:00-14:10:15Z returned no lines, so no startup or restart line is logged in the window.",
+   "evidence_ids": [
+    "E-102"
+   ]
+  },
+  {
+   "text": "orchestrator err_rate is flat at 0.004 across 14:09-14:18 and does not change at 14:10:00, so there is no error signal from orchestrator at the incident onset.",
+   "evidence_ids": [
+    "E-110"
+   ]
+  },
+  {
+   "text": "The first WARN eviction line in 14:10:00-14:11:00 is at 14:10:35Z. No WARN eviction line appears at 14:10:11Z or earlier in that window, so no eviction is logged there before the 14:10:11Z duplicate-path warning.",
+   "evidence_ids": [
+    "E-116"
+   ]
+  },
+  {
+   "text": "A later WARN eviction line at 14:10:57Z uses the same count text, '6000 evicted', as the 14:10:35Z line. The line names no keys or key prefixes, so the evicted key identities are not recoverable from logs.",
+   "evidence_ids": [
+    "E-117"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The retries may have been triggered by the slow broker-gateway responses at 14:05-14:09Z, which could have pushed a caller past its timeout. The link between the two is not shown in the logs.",
+   "evidence_ids": [
+    "E-020"
+   ]
+  },
+  {
+   "text": "Duplicate submission candidates: orchestrator re-processing a redelivered inbound-msgs message (at-least-once consumption) would issue a second broker-gateway call. order-router is a second possible source if it is retried or re-invoked. Both are unverified without retry and idempotency config.",
+   "evidence_ids": [
+    "E-036"
+   ]
+  },
+  {
+   "text": "If the duplicate path is caused by a key-format or retry-client change, it most likely sits inside the 14:02 order-router-00601 dependency bump, since no other order-router change appears in the change history for the window. This is not confirmed, because the diff is not available to me.",
+   "evidence_ids": [
+    "E-058"
+   ]
+  },
+  {
+   "text": "Evicted keys may include order-dedupe or idempotency keys, which would explain a missing-key warning in order-router. This is not verified: no key names or prefixes were queried, and the caller that reads these keys is not confirmed.",
+   "evidence_ids": [
+    "E-080"
+   ]
+  },
+  {
+   "text": "Memory did not reach the configured limit before 14:10:11Z. The 14:09 bucket is at 60.02 and the first eviction log is at 14:10:35Z, but the 14:10 bucket (77.195) spans 14:10:11Z, so the crossing cannot be placed.",
+   "evidence_ids": [
+    "E-092"
+   ]
+  },
+  {
+   "text": "The first miss is about 8 minutes after the 14:02 deploy, not immediately after it. That spacing does not by itself show a key-format change at rollout. A TTL or age-based expiry, or a store-side change, would fit the same timing equally well. This is not tested.",
+   "evidence_ids": [
+    "E-104"
+   ]
+  },
+  {
+   "text": "Orchestrator is unlikely to be the duplicate source. Its logs show no retry or redelivery activity, and its metrics show no change at 14:10 in latency, throughput or errors. This is inferred from INFO+ logs and does not rule out DEBUG-level activity or a redelivery that is not logged.",
+   "evidence_ids": [
+    "E-112"
+   ]
+  },
+  {
+   "text": "order-router's idempotency check more likely reads postgres than redis-cache, because postgres is its only storage-like sync dependency in the graph and redis-cache has no edge from it. The source or config has not been read, so this is unverified.",
+   "evidence_ids": [
+    "E-123"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The cause of the missing idempotency keys is not established. It is not known whether order-router stores them in postgres or redis-cache, nor their TTL.",
+  "The content of the order-router-00601 dependency bump is unknown (no diff, library name or author).",
+  "Whether two broker orders were actually executed is unconfirmed. Broker-gateway logs carry no order or message IDs, and the warnings cannot be joined to orders.",
+  "The source of the retried webhooks is unknown: wa-webhook logs show no redeliveries, and queue redelivery metrics are unavailable.",
+  "redis-cache eviction onset (14:10:35Z log) trails the first miss (14:10:11Z), but one-minute metrics cannot resolve ordering. Evicted key identities are unavailable, and no key count or used_memory metric exists.",
+  "The order-router log result was truncated at 14:41:38Z, so later activity and the total number of affected orders are unknown.",
+  "The unit of duplicate_orders and webhook_retries_pct is undocumented. Prior-day baselines were not checked.",
+  "The orchestrator-to-order-router graph edge is inconsistent. DEBUG-level logs for orchestrator, wa-webhook and order-router were not examined.",
+  "postgres, rabbitmq and llm-gateway were not queried in depth, and no past incident matches duplicate-order symptoms (INC-0412 and INC-0431 are weak matches).",
+  "The order-router log result was truncated (total 213, 200 returned, last timestamp 14:41:38Z). Activity after 14:41 is unseen, so the total number of affected orders is not known.",
+  "The warning lines carry no order ID or idempotency key, so duplicates could not be grouped by message ID or order key and per-order duplicate counts could not be produced.",
+  "Whether two orders were actually executed (not just treated as new) needs broker-gateway logs and order IDs, which were not queried.",
+  "orchestrator and broker-gateway were not queried, so the upstream duplicate-submission path is unverified.",
+  "wa-webhook has no log lines matching 'message' at WARN level. The contains filter may have missed the actual retry wording, so this is not evidence of no retries.",
+  "webhook_retries_pct was only retrieved as a summary, with no points, so its onset relative to 14:10 could not be checked.",
+  "duplicate_orders has no documented unit or definition, so the 18.0 value cannot be converted into an order count.",
+  "Compared with the prior day's baseline was not checked; no previous-day data was queried.",
+  "Metric points are at 5-minute granularity, so the exact start of the duplicates is only bounded to the 14:05-14:10 interval, not to the second.",
+  "The rabbitmq summary has no inbound-msgs queue depth, unacked, redelivery, requeue, consumer or dead-letter metrics, so queue retries were not measured.",
+  "wa-webhook logs contain no WhatsApp redelivery or response-time lines, and webhook response times to the WhatsApp platform were not measured. The source of the retried webhooks is unknown.",
+  "redis-cache (hit/miss, key expiry for dedupe keys) and postgres (lock waits, connection errors, failover) were not queried, so the dedupe-key miss is unexplained.",
+  "llm-gateway was not queried for timeouts or error rates.",
+  "order-router's metrics were returned without points, so the onset of duplicate_orders cannot be matched to 14:10 from this result.",
+  "broker-gateway returned only four slow-response warnings and no timeout lines. That is not proof that no timeouts happened, because the query was limited to WARN and above and to one 20-minute window.",
+  "No consumer disconnect or restart events for rabbitmq or order-router were queried.",
+  "get_changes returned no author fields, so the authors of the order-router deploy and the redis-cache config change are unknown.",
+  "The kinds parameter does not cover scaling or restart events, so consumer replica counts, autoscaling and restarts for wa-webhook, orchestrator, order-router and the queue consumers were not verified.",
+  "No changes or config were returned for wa-webhook, orchestrator, broker-gateway, llm-gateway, postgres or rabbitmq within the window. This is a negative result from the change feed, not proof that no such change happened.",
+  "I did not query get_dependencies for redis-cache, rabbitmq, wa-webhook or orchestrator, so queue prefetch and ack settings and idempotency-store dependencies were not mapped.",
+  "order-router's queue edges were not returned, so consumer-side effects through inbound-msgs or outbound-msgs could not be traced from this data.",
+  "Config contents beyond the change note (for example TTLs and retry counts) were not available from the tool output.",
+  "Not queried: portfolio-consumer, msg-delivery, rabbitmq, redis-cache, postgres, llm-gateway, portfolio-svc, aa-sync, market-data, auth-kyc. Their queue bindings, consumers of outbound-msgs and portfolio-updates, and dedupe behaviour are unverified.",
+  "No timeout, retry, redelivery or ack settings appear in any result, so retry behaviour is unknown.",
+  "The orchestrator↔order-router edge is inconsistent between T4-02 and T4-04, which needs checking.",
+  "No get_changes or search_incidents calls were made within budget, so no config or deploy changes on this path were identified.",
+  "The dependency tool returns no timestamps, so no ts values could be attached to evidence.",
+  "Four search calls returned no matching duplicate-order, redelivery, idempotency, dedupe-key or retry-storm incidents. Zero results may reflect the search index or wording, not the absence of such incidents, so this is a gap rather than proof none exist.",
+  "INC-0412 has null source and url fields, so its details could not be verified beyond the search summary.",
+  "Call budget (about 4) was used up, so I could not run narrower searches, such as 'double order', 'rabbitmq redelivery', 'inbound-msgs', 'order-router' or 'consumer ack'.",
+  "No past incident was found with a change or infrastructure fault that matches the 14:10 pattern, so I could not compare the earlier trigger type against this incident.",
+  "No used_memory or key-count metric exists for redis-cache, so memory growth and key population cannot be checked.",
+  "No keyspace hits or misses counts were returned, only hit_ratio, and the hit_ratio max of 1.003 is suspicious.",
+  "Only summaries were returned for memory_pct and hit_ratio, so their onset times are unknown. Points were not requested for these metrics.",
+  "order-router was searched only at INFO with the term 'redis'. A redis client would not necessarily log that word, so the empty result does not prove order-router does not use redis.",
+  "Postgres was searched at WARN only. The result covers slow queries and no lock or connection lines, but it does not prove those conditions were absent at lower severity.",
+  "The 14:07 maxmemory change was not queried directly, so it is unverified in this task's results.",
+  "Rollout completion time and replica restart history for order-router-00601 are not exposed by my tools (get_changes and get_dependencies return no deploy status or pod data), so the rollout window is unverified.",
+  "The diff of order-router-00601 and the name and version of the changed dependency are not returned, so I cannot confirm whether the idempotency key generation or retry client changed.",
+  "I did not query order-router's logs for the 14:02-14:10 startup or version lines or for idempotency lookups; that belongs to the observability agent.",
+  "search_incidents matched INC-0431 only on the general keywords 'order-router' and 'release'. Its root cause was a validation regression, not an idempotency or retry change, so it is weak evidence for this incident.",
+  "The orchestrator 'order' filter returned zero lines. This may be a filter mismatch or the service may not log submissions at INFO. An unfiltered or differently-worded query is needed before concluding the orchestrator did not re-submit.",
+  "broker-gateway INFO logs carry no client order IDs or message IDs and no submission lines, so a second broker execution cannot be confirmed or ruled out from logs. Broker execution or fill records are needed.",
+  "order-router idempotency warnings do not include an order ID, and no message ID is shared between the wa-webhook and order-router logs, so the duplicates cannot be joined to a specific order.",
+  "The wa-webhook queries were INFO-level only. DEBUG was not checked, so retry-related lines at lower severity could exist.",
+  "webhook_retries_pct has no documented unit or definition, and the metric result has no per-retry counts.",
+  "No tool results showed clock skew, but the ordering between wa-webhook and order-router was not checked against any other source.",
+  "Key count, used_memory and keyspace hit/miss counts were not returned. The metric list has memory_pct and hit_ratio only, so I could not check key count trends or whether idempotency key prefixes disappeared.",
+  "I did not query redis-cache for idempotency or dedupe key names, so I cannot say whether those keys were evicted.",
+  "query_metrics returned summaries without points for evicted_keys and memory_pct, so the 14:07 spike check rests on the WARN log timing, not a metric time series.",
+  "The eviction log lines show '6000 evicted' and '12000 evicted'. I cannot tell whether these counts are cumulative or per event.",
+  "The maxmemory cut to 1gb and the allkeys-lru policy at 14:07 are not confirmed by this agent. They are only reported in E-022.",
+  "The redis-cache logs were WARN-only, so INFO-level context and any warnings from other clients were not seen.",
+  "order-router's graph edges do not include redis-cache (E-023). Whether the dedupe path uses redis-cache is therefore unverified from my data.",
+  "The dependency graph shows call edges only, not what each store holds, so it cannot say whether redis-cache or postgres stores idempotency keys.",
+  "No tool returns TTL or eviction settings for idempotency keys. Those need redis-cache or postgres config, or order-router and orchestrator source.",
+  "get_dependencies was not run on postgres or order-router, and no config read was done, so the store-side key schema and expiry remain unknown.",
+  "The search for 'idempotency key TTL' found nothing, so historical context on TTL is unavailable.",
+  "Metrics are at 1-minute resolution, so the 14:10 bucket cannot be split at 14:10:11Z. Memory-limit crossing and hit_ratio timing before 14:10:11Z are unresolved.",
+  "The INFO-level log query for 14:07:00-14:10:40Z returned only the three WARN lines. No INFO lines appear, and no log line marks the 14:07 config change, so the config effect is only visible in metrics, if at all.",
+  "The 1gb limit and the 97% denominator are not confirmed by these results. They come from the change record (E-022), so the percent basis is assumed.",
+  "No key names or prefixes were queried, so the evicted keys cannot be linked to dedupe or idempotency keys.",
+  "Rollout completion time cannot be determined: the start, version and ready searches returned no lines, so the deploy-time boundary is not visible in order-router logs.",
+  "Idempotency hits cannot be confirmed or excluded before 14:10:11Z. No hit lines appear, and no DEBUG lines appear in the window at all, so DEBUG logging may be disabled or hits may not be logged.",
+  "The idempotency key format cannot be checked from these logs, because the miss lines do not include the key or an order or message ID.",
+  "The miss lines carry no order ID, so they cannot be matched to a routed or accepted order in this window.",
+  "Only order-router was queried, within 14:00:00-14:10:15Z. The 14:02 change diff and the redis-cache and wa-webhook logs were not checked.",
+  "DEBUG-level orchestrator logs were not queried, so dedupe or idempotency key handling logged at DEBUG would not appear here.",
+  "active_sessions was not fetched with points, so its behaviour around 14:10:00 is unknown.",
+  "The orchestrator logs show no broker submission lines, so whether orchestrator sent a second broker-gateway call cannot be confirmed from its logs.",
+  "Metrics were pulled with 1-minute steps, so sub-minute changes near 14:10:11 cannot be seen here.",
+  "The earlier 'order' filter returned empty and this unfiltered pull also has no 'order' text, so the empty result is consistent with genuinely absent lines, not a filter mismatch.",
+  "Key count: the redis-cache metrics summary has no key-count metric (E-050), so the number of keys with idempotency or dedupe prefixes cannot be measured.",
+  "Sampled key names and prefixes: redis-cache logs carry no key names, and no key-level query or key-sampling tool is available, so no key prefixes were observed.",
+  "Keyspace misses: there is no misses metric in the summary, only hit_ratio, whose max of 1.003 is not physically meaningful (E-049), so miss counts cannot be read.",
+  "Whether dedupe keys were evicted before 14:10:11Z: the eviction lines name no keys, and the 14:10 window was queried at WARN level only, so INFO-level eviction logs would not appear. This question cannot be answered from these results.",
+  "I did not query order-router or wa-webhook logs for key-prefix strings. The order-router logs show no redis lines (E-051), so the dedupe store used by order-router is unconfirmed.",
+  "No tool returns order-router source code or config values, so the store and TTL could not be read directly. Verifying requires the order-router repository or its runtime configuration.",
+  "get_dependencies shows call edges and queues only. It does not show what a service reads or writes in a store, so the store choice is inferred from the graph and not confirmed.",
+  "search_incidents returned only INC-0431, which is unrelated to idempotency storage, and no searched term matched a TTL or idempotency-key incident.",
+  "get_changes was not called for this task. Other team claims mention an order-router dependency bump at 14:02 and no config change, but neither says which store or TTL is used."
+ ],
+ "actions": [
+  {
+   "text": "Inspect the order-router-00601 diff and runtime configuration to identify which dependency changed and whether idempotency-key generation or the retry client changed. If it is implicated, prepare a rollback to the previous release.",
+   "rationale": "This is the only order-router change in the window. Its content is unknown, and a rollback is the fastest way to test H2 and stop the duplicates if it is the cause.",
+   "evidence_ids": [
+    "E-021",
+    "E-055",
+    "E-056",
+    "E-058"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Determine where order-router stores idempotency keys (postgres or redis-cache) and their TTL, from source or config. Then check whether keys with that prefix still exist and were evicted or expired.",
+   "rationale": "The store and TTL are unknown, and this decides whether the redis-cache eviction (H1) or something else explains the missing keys.",
+   "evidence_ids": [
+    "E-023",
+    "E-084",
+    "E-123",
+    "E-124"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Pull broker-gateway execution or fill records and order IDs for 14:10 onward to confirm whether two broker orders were actually executed per message, and size the customer impact. Reconcile affected customers' positions.",
+   "rationale": "The warnings do not name order IDs and broker-gateway INFO logs carry no submission data, so actual double execution is not confirmed. The duplicate_orders metric is still at 18.0 at the end of the window.",
+   "evidence_ids": [
+    "E-011",
+    "E-064",
+    "E-066",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Re-evaluate the redis-cache maxmemory setting. Memory reached 97% and evictions continued after the 14:07 change, so consider restoring capacity if redis holds any dedupe keys.",
+   "rationale": "Memory pressure and steady evictions persist, and capacity restoration is low-risk. It is justified by the eviction data, though a link to the duplicates is unproven.",
+   "evidence_ids": [
+    "E-022",
+    "E-044",
+    "E-047",
+    "E-086"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check wa-webhook and rabbitmq for retry and redelivery sources: webhook response time to WhatsApp, DEBUG logs, inbound-msgs redelivery and requeue metrics, and consumer restarts.",
+   "rationale": "The origin of the retried webhooks is unknown, and webhook_retries_pct rose at the same time as the duplicates.",
+   "evidence_ids": [
+    "E-059",
+    "E-062",
+    "E-068"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add duplicate-detection logging that includes the message ID, idempotency key and order ID in the order-router warnings, and alert on duplicate_orders above zero.",
+   "rationale": "The current warnings carry no IDs, so duplicates cannot be joined to orders, and the metric's unit is undocumented.",
+   "evidence_ids": [
+    "E-066",
+    "E-010",
+    "E-001"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Review change-management for the redis-cache memory reduction, including checking which services depend on keys that live in redis-cache (including the orchestrator, which calls it) before reducing limits.",
+   "rationale": "A 4gb to 1gb cut was followed by sustained evictions at 97% memory, and the dependents' key usage is unmapped.",
+   "evidence_ids": [
+    "E-022",
+    "E-081",
+    "E-085"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 60,
+  "tool_attempts": 60,
+  "llm_calls": 46,
+  "tokens_in": 459607,
+  "tokens_out": 91078,
+  "rounds": 3,
+  "elapsed_s": 314.8
+ },
+ "dropped_claims": 0
+}

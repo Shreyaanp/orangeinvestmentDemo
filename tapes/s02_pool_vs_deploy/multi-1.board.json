@@ -1,0 +1,1770 @@
+{
+ "incident_text": "Users report that portfolio balances look stale or fail to refresh since about 12:55. Sync errors are spiking.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 44,
+  "tool_attempts": 44,
+  "llm_calls": 32,
+  "tokens_in": 282868,
+  "tokens_out": 64333
+ },
+ "round": 2,
+ "elapsed_s": 279.353572299995,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "First aa-sync ERROR in the 12:25-13:30 window is connection pool exhaustion at 12:56:08Z, which falls just after the reported 12:55 onset. Results are oldest-first, so no aa-sync ERROR appears between 12:25 and 12:56:08 in that window.",
+   "excerpt": "2026-03-14T12:56:08Z ERROR aa-sync: connection pool exhausted: 100/99 connections in use, requests queued",
+   "source_call_id": "T1-05",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:56:08Z",
+   "ref": null,
+   "id": "E-001",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "aa-sync pool is saturated, with pool_in_use reaching its maximum over the window.",
+   "excerpt": "pool_in_use max 100.0, last 100.0 (min 20.969, mean 65.833)",
+   "source_call_id": "T1-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-002",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "aa-sync error rate peaked at 0.355 over the 12:00-14:00 window, versus a minimum of 0.003. The summary does not show the baseline period separately.",
+   "excerpt": "aa-sync err_rate min 0.003, max 0.355, mean 0.198, last 0.353",
+   "source_call_id": "T1-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-003",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "aa-sync latency rose sharply, peaking at 777 ms, with a last value of 675.735 ms.",
+   "excerpt": "aa-sync latency_ms min 84.612, max 777.091, mean 438.245, last 675.735",
+   "source_call_id": "T1-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-004",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "Pool exhaustion log lines continue after onset and show the pool at or above its limit. Counts exceed the nominal 100 limit at times (e.g. 100/106 at 13:06:00Z).",
+   "excerpt": "2026-03-14T13:06:00Z ERROR aa-sync: connection pool exhausted: 100/106 connections in use, requests queued",
+   "source_call_id": "T1-05",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:06:00Z",
+   "ref": null,
+   "id": "E-005",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer error rate reached 0.28 and latency peaked at 694 ms, though this is a whole-window summary without baseline or onset timing.",
+   "excerpt": "portfolio-consumer err_rate min 0.002, max 0.28, mean 0.153, last 0.278; latency_ms max 694.23",
+   "source_call_id": "T1-04",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-006",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer processing rate (rps) stayed in a narrow band (min 37.081, max 43.454), which does not show a clear drop in consumption.",
+   "excerpt": "portfolio-consumer rps min 37.081, max 43.454, mean 40.162, last 39.722",
+   "source_call_id": "T1-04",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-007",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "FACT",
+   "claim": "portfolio-svc error rate and latency look healthy across the window, which weakens the idea that portfolio-svc itself is the first failure.",
+   "excerpt": "portfolio-svc err_rate min 0.002, max 0.004, mean 0.003; latency_ms max 129.109, mean 119.849",
+   "source_call_id": "T1-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-008",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-009": {
+   "kind": "FACT",
+   "claim": "broker-gateway error rate and latency stayed low, which weakens the idea that the broker is the cause.",
+   "excerpt": "broker-gateway err_rate min 0.003, max 0.007, mean 0.005; latency_ms max 236.535, mean 220.588",
+   "source_call_id": "T1-03",
+   "service": "broker-gateway",
+   "ts": null,
+   "ref": null,
+   "id": "E-009",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-010": {
+   "kind": "ASSUMPTION",
+   "claim": "aa-sync pool exhaustion may be the first failure, with portfolio-consumer errors as a downstream effect. This needs confirmation from time-series points, since I have only summaries and the consumer's error timing is unknown.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-010",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-011": {
+   "kind": "FACT",
+   "claim": "portfolio-updates queue depth was already rising at 12:57 and reached 526 ready messages by 13:09, with 3 consumers still attached.",
+   "excerpt": "2026-03-14T12:57:07Z WARN rabbitmq: queue portfolio-updates: 147 messages ready, 3 consumers ... 2026-03-14T13:09:43Z WARN rabbitmq: queue portfolio-updates: 526 messages ready, 3 consumers",
+   "source_call_id": "T2-05",
+   "service": "rabbitmq",
+   "ts": "2026-03-14T12:57:07Z",
+   "ref": null,
+   "id": "E-011",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-012": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer began logging redeliveries on portfolio-updates at 12:51:47, before the backlog was logged.",
+   "excerpt": "2026-03-14T12:51:47Z WARN portfolio-consumer: redelivered 2 messages on portfolio-updates",
+   "source_call_id": "T2-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:51:47Z",
+   "ref": null,
+   "id": "E-012",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-013": {
+   "kind": "FACT",
+   "claim": "The first aa-sync failure in the window is an HTTP 503 error from portfolio-consumer at 12:51:50, just after the first redeliveries.",
+   "excerpt": "2026-03-14T12:51:50Z ERROR portfolio-consumer: aa-sync call failed: HTTP 503",
+   "source_call_id": "T2-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:51:50Z",
+   "ref": null,
+   "id": "E-013",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-014": {
+   "kind": "FACT",
+   "claim": "aa-sync call timeouts were already present at 12:52 and grew over the window, reaching 746ms by 13:06.",
+   "excerpt": "2026-03-14T12:52:18Z WARN portfolio-consumer: upstream call to aa-sync timed out after 241ms ... 2026-03-14T13:06:09Z WARN portfolio-consumer: upstream call to aa-sync timed out after 746ms",
+   "source_call_id": "T2-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:52:18Z",
+   "ref": null,
+   "id": "E-014",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-015": {
+   "kind": "FACT",
+   "claim": "Redeliveries on portfolio-updates recur through the window, each batch 4 to 5 messages, which points to unacked messages timing out and being requeued.",
+   "excerpt": "2026-03-14T12:56:45Z WARN portfolio-consumer: redelivered 5 messages on portfolio-updates ... 2026-03-14T13:06:28Z WARN portfolio-consumer: redelivered 4 messages on portfolio-updates",
+   "source_call_id": "T2-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:56:45Z",
+   "ref": null,
+   "id": "E-015",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-016": {
+   "kind": "FACT",
+   "claim": "Redis cache shows no key eviction and an average hit ratio of 0.962, with a max of 1.012 that is above 1 and is a data-quality concern.",
+   "excerpt": "redis-cache metric \"evicted_keys\" stats min 0.0, max 0.0, mean 0.0, last 0.0 ; metric \"hit_ratio\" stats min 0.925, max 1.012, mean 0.962, last 0.955",
+   "source_call_id": "T2-02",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-016",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-017": {
+   "kind": "FACT",
+   "claim": "Postgres shows no pool waiting and replication lag under half a second over the window.",
+   "excerpt": "postgres metric \"pool_waiting\" stats min 0.0, max 0.0, mean 0.0, last 0.0 ; metric \"replication_lag_s\" stats min 0.384, max 0.427, mean 0.401, last 0.389",
+   "source_call_id": "T2-03",
+   "service": "postgres",
+   "ts": null,
+   "ref": null,
+   "id": "E-017",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-018": {
+   "kind": "FACT",
+   "claim": "RabbitMQ error rate was 0 over the window, which argues against broker-side failures.",
+   "excerpt": "rabbitmq metric \"err_rate\" stats min 0.0, max 0.0, mean 0.0, last 0.0",
+   "source_call_id": "T2-01",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-018",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-019": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer also logged five 'update ... had no changes' warnings in the window, which may indicate processing that did not refresh balances.",
+   "excerpt": "2026-03-14T12:43:47Z WARN portfolio-consumer: update 753624 had no changes ... 2026-03-14T12:59:19Z WARN portfolio-consumer: update 46844 had no changes",
+   "source_call_id": "T2-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:43:47Z",
+   "ref": null,
+   "id": "E-019",
+   "author": "observability",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-020": {
+   "kind": "ASSUMPTION",
+   "claim": "The backlog is driven by portfolio-consumer waiting on slow or failing aa-sync calls, so aa-sync is the likely root cause. I did not query aa-sync and this is inferred from the timing.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-020",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-021": {
+   "kind": "ASSUMPTION",
+   "claim": "Queue depth grows at roughly 30 messages per minute from 12:57 to 13:09, from 147 to 526 ready messages, which means the consumers are processing much slower than publishers.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-021",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-022": {
+   "kind": "ASSUMPTION",
+   "claim": "Cached portfolio balances are probably stale because the consumer is not applying updates, but I did not check the TTLs or keys for portfolio balances.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-022",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-023": {
+   "kind": "FACT",
+   "claim": "auth-kyc deployed a log-level change at 12:25Z, inside the window. It is not on the observed portfolio dependency path, so it is unlikely to be causal.",
+   "excerpt": "\"ref\":\"auth-kyc-00453\",\"note\":\"log level tweak\"",
+   "source_call_id": "T3-01",
+   "service": "auth-kyc",
+   "ts": "2026-03-14T12:25:00Z",
+   "ref": null,
+   "id": "E-023",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-024": {
+   "kind": "FACT",
+   "claim": "web-app deployed a UI copy change on the holdings page at 13:00Z. This is a presentation-only change, so it is unlikely to cause stale backend balances.",
+   "excerpt": "\"ref\":\"web-app-00231\",\"note\":\"UI copy change on holdings page\"",
+   "source_call_id": "T3-01",
+   "service": "web-app",
+   "ts": "2026-03-14T13:00:00Z",
+   "ref": null,
+   "id": "E-024",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-025": {
+   "kind": "FACT",
+   "claim": "market-data deployed a log-level change at 13:20Z, after onset and outside the 11:55-13:00 window. It cannot explain the 12:55 onset.",
+   "excerpt": "\"ref\":\"market-data-00374\",\"note\":\"log level tweak\"",
+   "source_call_id": "T3-01",
+   "service": "market-data",
+   "ts": "2026-03-14T13:20:00Z",
+   "ref": null,
+   "id": "E-025",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-026": {
+   "kind": "FACT",
+   "claim": "The change query returned a complete result set with only 3 deploy items and no config, migration or flag records for 11:30-13:30Z.",
+   "excerpt": "\"total\":3,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T3-01",
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-026",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-027": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer calls aa-sync with call weight 0.8, so an aa-sync failure would propagate to portfolio-consumer.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"aa-sync\",\"weight\":0.8}",
+   "source_call_id": "T3-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-027",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-028": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer consumes from the portfolio-updates queue, so a producer change or backlog there would show up as stale portfolio data.",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T3-02",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-028",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-029": {
+   "kind": "FACT",
+   "claim": "aa-sync calls postgres with weight 0.7 and publishes to portfolio-updates. Both are candidate failure points, but no change record was found for either.",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"postgres\",\"weight\":0.7}",
+   "source_call_id": "T3-03",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-029",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-030": {
+   "kind": "FACT",
+   "claim": "aa-sync publishes to the portfolio-updates queue that portfolio-consumer consumes from.",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T3-03",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-030",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-031": {
+   "kind": "FACT",
+   "claim": "[Past incident INC-0412, hypothesis only, not current evidence] A redis restart caused stale late balance notifications. No redis-cache change was found in this window, so this remains unverified.",
+   "excerpt": "\"root_cause\":\"Redis restart evicted hot context, cache stampede on portfolio-svc\"",
+   "source_call_id": "T3-04",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-031",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-032": {
+   "kind": "ASSUMPTION",
+   "claim": "auth-kyc and web-app are not in the observed portfolio-balance path, based only on the dependency edges returned so far.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-032",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-033": {
+   "kind": "FACT",
+   "claim": "portfolio-svc calls postgres with call weight 0.8, its largest downstream dependency",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"postgres\",\"weight\":0.8}",
+   "source_call_id": "T4-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-033",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-034": {
+   "kind": "FACT",
+   "claim": "portfolio-svc calls redis-cache with call weight 0.2",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"redis-cache\",\"weight\":0.2}",
+   "source_call_id": "T4-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-034",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-035": {
+   "kind": "FACT",
+   "claim": "portfolio-svc is called by orchestrator (weight 0.4) and web-app (weight 0.5)",
+   "excerpt": "{\"direction\":\"called_by\",\"name\":\"orchestrator\",\"weight\":0.4}",
+   "source_call_id": "T4-01",
+   "service": "portfolio-svc",
+   "ts": null,
+   "ref": null,
+   "id": "E-035",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-036": {
+   "kind": "FACT",
+   "claim": "aa-sync calls postgres with call weight 0.7",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"postgres\",\"weight\":0.7}",
+   "source_call_id": "T4-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-036",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-037": {
+   "kind": "FACT",
+   "claim": "aa-sync publishes to the portfolio-updates queue",
+   "excerpt": "{\"direction\":\"publishes_to\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T4-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-037",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-038": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer calls aa-sync synchronously with call weight 0.8",
+   "excerpt": "{\"direction\":\"calls\",\"name\":\"aa-sync\",\"weight\":0.8}",
+   "source_call_id": "T4-03",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-038",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-039": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer consumes from the portfolio-updates queue",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"portfolio-updates\",\"weight\":null}",
+   "source_call_id": "T4-03",
+   "service": "portfolio-consumer",
+   "ts": null,
+   "ref": null,
+   "id": "E-039",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-040": {
+   "kind": "ASSUMPTION",
+   "claim": "aa-sync and portfolio-consumer form a loop: aa-sync publishes to portfolio-updates, portfolio-consumer consumes it and calls aa-sync back. A slow or failing aa-sync could therefore back up the consumer and the queue. The retry and timeout settings are not known.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-040",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-041": {
+   "kind": "ASSUMPTION",
+   "claim": "postgres is a single point of failure on the balance refresh path, since both portfolio-svc (0.8) and aa-sync (0.7) depend on it. redis-cache is only used by portfolio-svc, so it is not shared.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-041",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-042": {
+   "kind": "FACT",
+   "claim": "Deploy to auth-kyc at 12:25, a log level tweak. It is not on any mapped edge of the sync path, and it is before onset.",
+   "excerpt": "\"ref\":\"auth-kyc-00453\",\"note\":\"log level tweak\"",
+   "source_call_id": "T4-04",
+   "service": "auth-kyc",
+   "ts": "2026-03-14T12:25:00Z",
+   "ref": null,
+   "id": "E-042",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-043": {
+   "kind": "FACT",
+   "claim": "Deploy to web-app at 13:00, a UI copy change. It is downstream of portfolio-svc and is not a plausible cause of the backend sync errors.",
+   "excerpt": "\"ref\":\"web-app-00231\",\"note\":\"UI copy change on holdings page\"",
+   "source_call_id": "T4-04",
+   "service": "web-app",
+   "ts": "2026-03-14T13:00:00Z",
+   "ref": null,
+   "id": "E-043",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-044": {
+   "kind": "FACT",
+   "claim": "Deploy to market-data at 13:20, a log level tweak. It is after onset and no mapped edge connects it to the sync path.",
+   "excerpt": "\"ref\":\"market-data-00374\",\"note\":\"log level tweak\"",
+   "source_call_id": "T4-04",
+   "service": "market-data",
+   "ts": "2026-03-14T13:20:00Z",
+   "ref": null,
+   "id": "E-044",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-045": {
+   "kind": "FACT",
+   "claim": "Deploy to orchestrator at 13:47, a minor copy change. It is after onset and too late to explain the 12:55 onset.",
+   "excerpt": "\"ref\":\"orchestrator-00740\",\"note\":\"minor copy change\"",
+   "source_call_id": "T4-04",
+   "service": "orchestrator",
+   "ts": "2026-03-14T13:47:00Z",
+   "ref": null,
+   "id": "E-045",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-046": {
+   "kind": "ASSUMPTION",
+   "claim": "No config, migration or flag change occurred in the window. The query asked for all kinds and returned only deploys, but this is an absence in the result, not a confirmed negative.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-046",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-047": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0412 (2026-01-18, 'Late balance notifications') had a root cause of a Redis restart evicting hot context, causing a cache stampede on portfolio-svc. It was resolved by restarting Redis and pre-warming hot keys. Past incidents are hypotheses only.",
+   "excerpt": "\"root_cause\":\"Redis restart evicted hot context, cache stampede on portfolio-svc\",\"fix\":\"Restarted redis and pre-warmed hot keys\"",
+   "source_call_id": "T5-01",
+   "service": "redis-cache",
+   "ts": null,
+   "ref": null,
+   "id": "E-047",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-048": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0412 was returned again for the portfolio-updates queue backlog query, the only incident in that result set that involves portfolio-svc state. No incident about a queue backlog itself was found.",
+   "excerpt": "\"id\":\"INC-0412\",\"date\":\"2026-01-18\",\"summary\":\"Late balance notifications\"",
+   "source_call_id": "T5-02",
+   "service": "portfolio-updates",
+   "ts": null,
+   "ref": null,
+   "id": "E-048",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-049": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0388 (2025-12-09) was aa-sync data fetch failures for one bank, caused by bank-side FIP downtime. This is a single-bank external cause, which does not match a platform-wide spike in sync errors.",
+   "excerpt": "\"root_cause\":\"Bank-side FIP downtime\"",
+   "source_call_id": "T5-03",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-049",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-050": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0431 (2026-02-02) was an order placement error caused by a validation regression in an order-router release. It concerns order placement, not portfolio refresh, so it is a weak match.",
+   "excerpt": "\"root_cause\":\"Validation regression in order-router release\"",
+   "source_call_id": "T5-01",
+   "service": "order-router",
+   "ts": null,
+   "ref": null,
+   "id": "E-050",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-051": {
+   "kind": "ASSUMPTION",
+   "claim": "INC-0412 is a plausible pattern if a redis-cache restart or eviction happened shortly before 12:55 UTC on 2026-03-14. This is unverified, because I did not query changes or redis-cache state for the current window.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-051",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-052": {
+   "kind": "ASSUMPTION",
+   "claim": "The current incident does not match the aa-sync external-outage pattern (INC-0388) unless sync errors are concentrated on one bank or FIP. Whether they are is not established here.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-052",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-053": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use first departs from baseline (~22) at 12:50 UTC, rising to 35.286.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:49:00Z\",\"value\":22.315},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":35.286}",
+   "source_call_id": "T6-01",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-053",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-054": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use reaches the 100.0 cap at 12:55 and stays there through the end of the window.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:55:00Z\",\"value\":100.0}",
+   "source_call_id": "T6-01",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:55:00Z",
+   "ref": null,
+   "id": "E-054",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-055": {
+   "kind": "FACT",
+   "claim": "aa-sync latency_ms first departs from baseline (~85–94 ms) at 12:50 UTC, rising to 170.767 ms.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:49:00Z\",\"value\":85.738},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":170.767}",
+   "source_call_id": "T6-03",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-055",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-056": {
+   "kind": "FACT",
+   "claim": "aa-sync err_rate first departs from baseline (~0.004) at 12:50 UTC, rising to 0.048, a gradual ramp of about 0.044 per minute until 12:57.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:49:00Z\",\"value\":0.004},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":0.048}",
+   "source_call_id": "T6-02",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-056",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-057": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer err_rate first departs from baseline (~0.003) at 12:51 UTC, one minute after aa-sync's departures, rising to 0.034.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":0.003},{\"ts\":\"2026-03-14T12:51:00Z\",\"value\":0.034}",
+   "source_call_id": "T6-04",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:51:00Z",
+   "ref": null,
+   "id": "E-057",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-058": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer rps stayed within its baseline band for the whole window, so there is no clear consumption drop in this query. Its minimum of 37.442 at 12:41 is inside the pre-incident range.",
+   "excerpt": "\"stats\":{\"min\":37.442,\"max\":42.231,\"mean\":40.264,\"last\":39.369,\"missing\":0}",
+   "source_call_id": "T6-05",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:41:00Z",
+   "ref": null,
+   "id": "E-058",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-059": {
+   "kind": "FACT",
+   "claim": "aa-sync logs show the first WARN for slow holdings_snapshot queries at 12:50:17, at 171ms. This matches the 12:50 metric departure and is the earliest aa-sync warning in the query.",
+   "excerpt": "2026-03-14T12:50:17Z WARN aa-sync: slow query on holdings_snapshot took 171ms",
+   "source_call_id": "T6-06",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:17Z",
+   "ref": null,
+   "id": "E-059",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-060": {
+   "kind": "FACT",
+   "claim": "Slow-query durations on aa-sync rise through the window, reaching 636ms by 12:56:58.",
+   "excerpt": "2026-03-14T12:56:58Z WARN aa-sync: slow query on holdings_snapshot took 636ms",
+   "source_call_id": "T6-06",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:56:58Z",
+   "ref": null,
+   "id": "E-060",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-061": {
+   "kind": "FACT",
+   "claim": "The first aa-sync ERROR in the 12:40–12:57 query is connection pool exhaustion at 12:56:08. This is about one minute after pool_in_use reached 100.0 at 12:55, so the first aa-sync ERROR lags the metric saturation.",
+   "excerpt": "2026-03-14T12:56:08Z ERROR aa-sync: connection pool exhausted: 100/99 connections in use, requests queued",
+   "source_call_id": "T6-06",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:56:08Z",
+   "ref": null,
+   "id": "E-061",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-062": {
+   "kind": "FACT",
+   "claim": "The aa-sync pool-exhaustion log reports 100 connections in use against a limit printed as 99. This conflicts with the nominal 100 limit cited in E-005, so the limit value needs checking.",
+   "excerpt": "connection pool exhausted: 100/99 connections in use, requests queued",
+   "source_call_id": "T6-06",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:56:08Z",
+   "ref": null,
+   "id": "E-062",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-063": {
+   "kind": "ASSUMPTION",
+   "claim": "aa-sync is the first failing service: its pool, latency and error metrics depart at 12:50, one minute before portfolio-consumer's error rate. This ordering is consistent with the consumer blaming aa-sync, but clock skew is not ruled out.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-063",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-064": {
+   "kind": "ASSUMPTION",
+   "claim": "The consumer-side 503 at 12:51:50 and timeouts at 12:52:18 may come from a different aa-sync request path or from consumer-side timing, because aa-sync's own logs show no 503 or timeout lines between 12:40 and 12:57. The consumer's reported aa-sync failures are therefore not confirmed by aa-sync's logs.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-064",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-065": {
+   "kind": "FACT",
+   "claim": "aa-sync slow holdings_snapshot queries were already logged at 12:50:17Z, about 6 minutes before the first pool-exhaustion ERROR at 12:56:08Z. This is the earliest aa-sync signal in the window.",
+   "excerpt": "2026-03-14T12:50:17Z WARN aa-sync: slow query on holdings_snapshot took 171ms",
+   "source_call_id": "T7-03",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:17Z",
+   "ref": null,
+   "id": "E-065",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-066": {
+   "kind": "FACT",
+   "claim": "aa-sync holdings_snapshot query duration grew over the window, reaching 747ms by 13:00:05Z.",
+   "excerpt": "2026-03-14T13:00:05Z WARN aa-sync: slow query on holdings_snapshot took 747ms",
+   "source_call_id": "T7-03",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:00:05Z",
+   "ref": null,
+   "id": "E-066",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-067": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer's first aa-sync call failure in the 12:45-12:58 ERROR query is HTTP 503 at 12:51:50Z, before aa-sync logs any pool error.",
+   "excerpt": "2026-03-14T12:51:50Z ERROR portfolio-consumer: aa-sync call failed: HTTP 503",
+   "source_call_id": "T7-05",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:51:50Z",
+   "ref": null,
+   "id": "E-067",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-068": {
+   "kind": "FACT",
+   "claim": "The portfolio-consumer ERROR query for 12:45-12:58 returned 9 lines and was not truncated, so all 503 failures in that window are covered. The last one is at 12:57:53Z.",
+   "excerpt": "\"total\":9,\"truncated\":false",
+   "source_call_id": "T7-05",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:57:53Z",
+   "ref": null,
+   "id": "E-068",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-069": {
+   "kind": "FACT",
+   "claim": "aa-sync's first pool-exhaustion ERROR in the WARN+ query is at 12:56:08Z, with 100/99 connections in use.",
+   "excerpt": "2026-03-14T12:56:08Z ERROR aa-sync: connection pool exhausted: 100/99 connections in use, requests queued",
+   "source_call_id": "T7-03",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:56:08Z",
+   "ref": null,
+   "id": "E-069",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-070": {
+   "kind": "FACT",
+   "claim": "aa-sync pool exhaustion continued past 13:00Z and the connection count exceeded the nominal 100 limit at times, reaching 100/106 at 13:06:00Z.",
+   "excerpt": "2026-03-14T13:06:00Z ERROR aa-sync: connection pool exhausted: 100/106 connections in use, requests queued",
+   "source_call_id": "T7-03",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:06:00Z",
+   "ref": null,
+   "id": "E-070",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-071": {
+   "kind": "FACT",
+   "claim": "aa-sync rps was in a narrow band over the window (min 33.324, max 36.791). This is a whole-window summary without per-minute timing, so it does not show a pre-onset load rise.",
+   "excerpt": "\"metric\":\"rps\",\"stats\":{\"min\":33.324,\"max\":36.791,\"mean\":34.906,\"last\":34.48",
+   "source_call_id": "T7-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-071",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-072": {
+   "kind": "FACT",
+   "claim": "aa-sync error rate summary ranged from 0.003 to 0.355, with no baseline or time points returned.",
+   "excerpt": "\"metric\":\"err_rate\",\"stats\":{\"min\":0.003,\"max\":0.355,\"mean\":0.171,\"last\":0.355",
+   "source_call_id": "T7-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-072",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-073": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use summary ranged from 21.074 to 100.0, with a last value of 100.0.",
+   "excerpt": "\"metric\":\"pool_in_use\",\"stats\":{\"min\":21.074,\"max\":100.0,\"mean\":60.994,\"last\":100.0",
+   "source_call_id": "T7-02",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-073",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-074": {
+   "kind": "FACT",
+   "claim": "The RabbitMQ metric summary contains only err_rate, latency_ms, memory_pct and rps. It has no publish rate, deliver/ack rate, unacked count or redelivered count.",
+   "excerpt": "\"total\":4,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T7-01",
+   "service": "rabbitmq",
+   "ts": null,
+   "ref": null,
+   "id": "E-074",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-075": {
+   "kind": "FACT",
+   "claim": "A case-insensitive 'fip' search of aa-sync logs in 12:30-13:15 returned no lines. This does not show bank or FIP concentration, and the search may not match the log field that carries the bank.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T7-04",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-075",
+   "author": "observability",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-076": {
+   "kind": "ASSUMPTION",
+   "claim": "The holdings_snapshot slow query is probably aa-sync's postgres call (aa-sync calls postgres with weight 0.7). The logs do not name the database, and postgres summary metrics were reported as healthy, so this conflicts with the postgres health signal and needs checking.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:17Z",
+   "ref": null,
+   "id": "E-076",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-077": {
+   "kind": "ASSUMPTION",
+   "claim": "Slow downstream queries before pool saturation are the likely first failure: slow calls hold connections longer, the pool fills, and consumer calls then time out with 503s. This is inferred from log ordering, not from per-call timing data.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-077",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-078": {
+   "kind": "ASSUMPTION",
+   "claim": "Inbound load on aa-sync probably did not rise, since rps stayed in a narrow band. This is only a whole-window summary, so a short pre-onset spike is not ruled out.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-078",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-079": {
+   "kind": "FACT",
+   "claim": "Only change in 12:00-13:00 UTC across all services (all kinds) is an auth-kyc deploy at 12:25Z, a log level tweak. It is not on the aa-sync/portfolio path and is before the 12:55 onset.",
+   "excerpt": "\"ts\":\"2026-03-14T12:25:00Z\",\"kind\":\"deploy\",\"service\":\"auth-kyc\",\"ref\":\"auth-kyc-00453\",\"note\":\"log level tweak\"",
+   "source_call_id": "T8-01",
+   "service": "auth-kyc",
+   "ts": "2026-03-14T12:25:00Z",
+   "ref": null,
+   "id": "E-079",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-080": {
+   "kind": "FACT",
+   "claim": "The change query was complete: no truncation or partial results. This covers aa-sync, portfolio-consumer, rabbitmq, postgres, redis-cache and broker-gateway, since it was run with service null. No per-service queries were needed.",
+   "excerpt": "\"total\":1,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T8-01",
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-080",
+   "author": "dependency",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-081": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0388 (history only, not current evidence) was a single-bank aggregator fetch failure caused by bank-side FIP downtime. It does not match a platform-wide sync error spike.",
+   "excerpt": "Account aggregator data fetch failures for one bank",
+   "source_call_id": "T8-02",
+   "service": null,
+   "ts": "2025-12-09T00:00:00Z",
+   "ref": null,
+   "id": "E-081",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-082": {
+   "kind": "FACT",
+   "claim": "Past incident INC-0412 (history only, not current evidence) had a root cause of a Redis restart evicting hot context, causing a cache stampede on portfolio-svc. No redis-cache change exists in this window to support it.",
+   "excerpt": "Redis restart evicted hot context, cache stampede on portfolio-svc",
+   "source_call_id": "T8-03",
+   "service": "redis-cache",
+   "ts": "2026-01-18T00:00:00Z",
+   "ref": null,
+   "id": "E-082",
+   "author": "dependency",
+   "reliability": 0.5,
+   "flags": [
+    "history"
+   ]
+  },
+  "E-083": {
+   "kind": "ASSUMPTION",
+   "claim": "No third-party aggregator maintenance notice, certificate/token expiry or scheduled job around 12:45-12:56 was found. This is an absence in the searched incident index, not a confirmed negative, because no tool reads maintenance feeds, credential stores or cron schedules.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-083",
+   "author": "dependency",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-084": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use leaves its ~22 baseline at 12:50Z (35.286), up from 22.315 at 12:49Z.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:49:00Z\",\"value\":22.315},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":35.286}",
+   "source_call_id": "T9-01",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-084",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-085": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use reaches its maximum of 100.0 at 12:55Z and stays there through 13:14Z.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:55:00Z\",\"value\":100.0}",
+   "source_call_id": "T9-01",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:55:00Z",
+   "ref": null,
+   "id": "E-085",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-086": {
+   "kind": "FACT",
+   "claim": "aa-sync latency_ms leaves its ~86-94 ms baseline at 12:50Z (170.767), up from 85.738 at 12:49Z.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:49:00Z\",\"value\":85.738},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":170.767}",
+   "source_call_id": "T9-04",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-086",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-087": {
+   "kind": "FACT",
+   "claim": "aa-sync latency_ms keeps climbing after onset, reaching 747.109 at 13:00Z, with last value 738.409.",
+   "excerpt": "{\"ts\":\"2026-03-14T13:00:00Z\",\"value\":747.109}",
+   "source_call_id": "T9-04",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:00:00Z",
+   "ref": null,
+   "id": "E-087",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-088": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer err_rate stays at baseline through 12:50Z (0.003) and first rises at 12:51Z (0.034), one minute after aa-sync pool and latency moved.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":0.003},{\"ts\":\"2026-03-14T12:51:00Z\",\"value\":0.034}",
+   "source_call_id": "T9-03",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:51:00Z",
+   "ref": null,
+   "id": "E-088",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-089": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer err_rate plateaus near 0.278 from 12:58Z onward.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:58:00Z\",\"value\":0.278},{\"ts\":\"2026-03-14T12:59:00Z\",\"value\":0.279}",
+   "source_call_id": "T9-03",
+   "service": "portfolio-consumer",
+   "ts": "2026-03-14T12:58:00Z",
+   "ref": null,
+   "id": "E-089",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-090": {
+   "kind": "ASSUMPTION",
+   "claim": "The aa-sync pool and latency rise precedes the portfolio-consumer error rise by about one minute, so the ordering points to aa-sync as the first failure. With 1-minute sampling and only a 1-minute lead, this is suggestive rather than conclusive.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-090",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-091": {
+   "kind": "ASSUMPTION",
+   "claim": "The aa-sync metrics move about six minutes before the first aa-sync ERROR log (E-001, 12:56:08Z), so log-based onset understates how early aa-sync degraded. This is inferred from combining the metric and log timings.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-091",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-092": {
+   "kind": "FACT",
+   "claim": "aa-sync slow holdings_snapshot queries began at 12:50:17Z at 171ms and grew steadily; the first and largest values are logged in the same way.",
+   "excerpt": "2026-03-14T12:50:17Z WARN aa-sync: slow query on holdings_snapshot took 171ms",
+   "source_call_id": "T10-02",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:17Z",
+   "ref": null,
+   "id": "E-092",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-093": {
+   "kind": "FACT",
+   "claim": "aa-sync slow holdings_snapshot query durations reached about 777ms by 13:22 and stayed in roughly the 680-750ms range through 13:29.",
+   "excerpt": "2026-03-14T13:22:14Z WARN aa-sync: slow query on holdings_snapshot took 777ms",
+   "source_call_id": "T10-02",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:22:14Z",
+   "ref": null,
+   "id": "E-093",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-094": {
+   "kind": "FACT",
+   "claim": "aa-sync latency_ms was flat at about 87-93ms before 12:50 and then rose, with the first elevated bucket at 12:50.",
+   "excerpt": "{\"ts\":\"2026-03-14T12:48:00Z\",\"value\":86.862},{\"ts\":\"2026-03-14T12:50:00Z\",\"value\":206.026},{\"ts\":\"2026-03-14T12:52:00Z\",\"value\":356.746}",
+   "source_call_id": "T10-04",
+   "service": "aa-sync",
+   "ts": "2026-03-14T12:50:00Z",
+   "ref": null,
+   "id": "E-094",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-095": {
+   "kind": "FACT",
+   "claim": "aa-sync latency_ms plateaued at about 700-745ms from 13:00 to 13:28 after the rise.",
+   "excerpt": "{\"ts\":\"2026-03-14T13:00:00Z\",\"value\":738.127},{\"ts\":\"2026-03-14T13:12:00Z\",\"value\":704.989},{\"ts\":\"2026-03-14T13:22:00Z\",\"value\":744.821}",
+   "source_call_id": "T10-04",
+   "service": "aa-sync",
+   "ts": "2026-03-14T13:00:00Z",
+   "ref": null,
+   "id": "E-095",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-096": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_in_use hit its maximum of 100 and was 100 at the last sample.",
+   "excerpt": "{\"metric\":\"pool_in_use\",\"stats\":{\"min\":20.969,\"max\":100.0,\"mean\":65.833,\"last\":100.0,\"missing\":0}}",
+   "source_call_id": "T10-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-096",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-097": {
+   "kind": "FACT",
+   "claim": "aa-sync pool_max reported values from 95.179 to 105.769, above the nominal 100, so the pool limit metric is not a clean constant.",
+   "excerpt": "{\"metric\":\"pool_max\",\"stats\":{\"min\":95.179,\"max\":105.769,\"mean\":99.79,\"last\":99.77,\"missing\":0}}",
+   "source_call_id": "T10-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-097",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-098": {
+   "kind": "FACT",
+   "claim": "aa-sync rps stayed in a narrow band, so throughput did not drop while latency rose.",
+   "excerpt": "{\"metric\":\"rps\",\"stats\":{\"min\":32.687,\"max\":37.345,\"mean\":34.944,\"last\":36.83,\"missing\":0}}",
+   "source_call_id": "T10-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-098",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-099": {
+   "kind": "FACT",
+   "claim": "aa-sync CPU throttling stayed flat at about 3%, which weakens CPU starvation as the cause.",
+   "excerpt": "{\"metric\":\"cpu_throttle_pct\",\"stats\":{\"min\":2.877,\"max\":3.16,\"mean\":3.006,\"last\":3.16,\"missing\":0}}",
+   "source_call_id": "T10-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-099",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-100": {
+   "kind": "FACT",
+   "claim": "A search for 'postgres' in aa-sync logs in the 12:40-13:30 window returned no lines, so the logs do not name postgres as the slow component.",
+   "excerpt": "\"items\":[],\"total\":0,\"truncated\":false,\"partial\":false",
+   "source_call_id": "T10-03",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-100",
+   "author": "observability",
+   "reliability": 0.4,
+   "flags": [
+    "empty"
+   ]
+  },
+  "E-101": {
+   "kind": "FACT",
+   "claim": "aa-sync error rate peaked at 0.355 with a min of 0.003 over the window, with no baseline breakdown.",
+   "excerpt": "{\"metric\":\"err_rate\",\"stats\":{\"min\":0.003,\"max\":0.355,\"mean\":0.198,\"last\":0.353,\"missing\":0}}",
+   "source_call_id": "T10-01",
+   "service": "aa-sync",
+   "ts": null,
+   "ref": null,
+   "id": "E-101",
+   "author": "observability",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-102": {
+   "kind": "ASSUMPTION",
+   "claim": "The holdings_snapshot queries are the postgres calls that aa-sync makes (weight 0.7 per E-036), inferred from the query name and the dependency edge, not from the logs.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-102",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-103": {
+   "kind": "ASSUMPTION",
+   "claim": "Connections are held longer than the latency_ms value. At about 35 rps and about 0.7s latency, only about 25 connections would be in use on average, not 100, so the hold time is probably larger than the reported latency.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-103",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  },
+  "E-104": {
+   "kind": "ASSUMPTION",
+   "claim": "The slow-query rise starting at 12:50 is the earliest aa-sync signal and precedes portfolio-consumer's first 503 at 12:51:50Z (E-013). Cross-host clock skew has not been checked, so this ordering is provisional.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": null,
+   "id": "E-104",
+   "author": "observability",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "aa-sync's own holdings_snapshot queries became slow from 12:50, so each request held a pool connection longer; the pool filled by 12:55 and requests queued. That produced slow responses and 503s to portfolio-consumer's synchronous calls, so the consumer stalled, messages were redelivered, portfolio-updates backed up and balances went stale.",
+   "component": "aa-sync",
+   "cause_type": "slow_queries_connection_pool_exhaustion",
+   "supporting": [
+    "E-059",
+    "E-065",
+    "E-084",
+    "E-086",
+    "E-088",
+    "E-085",
+    "E-061",
+    "E-098",
+    "E-099",
+    "E-027",
+    "E-011"
+   ],
+   "contradicting": [
+    "E-064",
+    "E-062",
+    "E-097"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "The slowdown originates below aa-sync, in postgres or in the external aggregator/bank APIs that aa-sync calls: those calls get slow at 12:50 and hold connections, and the pool exhaustion is only a consequence.",
+   "component": "postgres",
+   "cause_type": "dependency_slowdown",
+   "supporting": [
+    "E-102",
+    "E-076",
+    "E-036"
+   ],
+   "contradicting": [
+    "E-017",
+    "E-100",
+    "E-075",
+    "E-049"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  },
+  "H3": {
+   "id": "H3",
+   "statement": "portfolio-consumer is the origin: redelivery storms and retries feed back through aa-sync (aa-sync publishes to the queue and the consumer calls it back), inflating aa-sync load until its pool exhausts.",
+   "component": "portfolio-consumer",
+   "cause_type": "retry_amplification",
+   "supporting": [
+    "E-012",
+    "E-040"
+   ],
+   "contradicting": [
+    "E-088",
+    "E-098",
+    "E-071",
+    "E-007",
+    "E-058",
+    "E-018",
+    "E-078"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  }
+ },
+ "tasks": {
+  "T1": {
+   "id": "T1",
+   "agent": "observability",
+   "goal": "Establish the timeline of the stale/failed portfolio refresh: using logs and metrics, find the exact onset time around 12:55 (and the preceding 30 minutes as baseline) for sync error rate, portfolio-svc and aa-sync error counts and latency, broker-gateway error rate and latency, and portfolio-consumer processing rate. Identify which service shows the first anomaly and the dominant error messages and codes.",
+   "hints": [
+    "Compare 12:25-12:55 baseline versus 12:55 onward",
+    "Group errors by service, error type and upstream target",
+    "Note whether errors are timeouts, auth failures, 5xx or schema/parse errors"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "aa-sync is the only service with a clear anomaly in the data I pulled. Its first ERROR in the 12:25-13:30 window is at 12:56:08Z, reporting connection pool exhaustion, and its pool_in_use metric reaches 100.0. aa-sync err_rate peaks at 0.355 and latency at 777 ms. portfolio-consumer err_rate reaches 0.28, but I have not confirmed whether it rises before or after aa-sync. portfolio-svc and broker-gateway summaries look healthy across the full window. Baseline vs. incident onset is not yet established because I only have whole-window summaries, not time-series points.",
+   "error": null
+  },
+  "T2": {
+   "id": "T2",
+   "agent": "observability",
+   "goal": "Examine the portfolio-updates queue and related infrastructure around 12:55: rabbitmq queue depth, publish vs consume rates, consumer count, unacked messages, redelivery and dead-letter counts for portfolio-updates (and inbound-msgs/outbound-msgs for comparison); also redis-cache hit rate, evictions, latency and memory, and postgres connections, lock waits, slow queries and replication lag. Determine whether portfolio-consumer is lagging, stuck or crashing, and whether cached balances are being served stale.",
+   "hints": [
+    "Check portfolio-consumer restarts, prefetch and ack behavior",
+    "Look at cache TTL expiry or key eviction patterns for portfolio balance keys",
+    "Compare against inbound-msgs and outbound-msgs to see if the issue is isolated to portfolio-updates"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "portfolio-updates backlog grew steadily from 147 ready messages at 12:57:07Z to 526 at 13:09:43Z, with 3 consumers present throughout, so consumers look stuck or slow rather than crashed. portfolio-consumer logs show repeated aa-sync HTTP 503s and timeouts that rose from 241ms to about 746ms, and periodic redeliveries of 2 to 5 messages. Redis and Postgres metrics look healthy: no evictions, no pool waiting, and replication lag under 0.5s. Balances are probably stale because the consumer is blocked on aa-sync, not because of cache or database faults, but the cache-staleness and ack/prefetch questions remain unverified.",
+   "error": null
+  },
+  "T3": {
+   "id": "T3",
+   "agent": "dependency",
+   "goal": "List every change near the incident time (roughly 11:55 to 13:00): deploys and rollouts of any service in the list, config and secret changes (including credentials, tokens, timeouts, rate limits, connection pool settings), database migrations on postgres, feature flag changes, rabbitmq or redis configuration changes, and any third-party or account-aggregator/broker-side changes or maintenance notices. Report exact timestamps, authors and what changed for each.",
+   "hints": [
+    "Do not limit to deploys; include flags, config, migrations, cron/schedule changes and certificate or token expiries",
+    "Pay particular attention to aa-sync, broker-gateway, portfolio-svc, portfolio-consumer, redis-cache, postgres and rabbitmq",
+    "Include changes slightly before 12:55 that could take effect later, such as TTLs or scheduled jobs"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "Within the 11:55-13:00 UTC window, the only recorded changes are an auth-kyc log-level deploy at 12:25Z and a web-app UI copy deploy at 13:00Z, and neither is on the portfolio path. The change query (deploy, config, migration, flag, 11:30-13:30Z) returned no config, migration or flag records. The graph shows portfolio-consumer calls aa-sync and consumes portfolio-updates, which aa-sync publishes to, and aa-sync calls postgres, but I found no change on any of those services. Changes to aa-sync, broker-gateway, portfolio-svc, redis-cache, postgres, rabbitmq and broker/AA-side maintenance remain unverified.",
+   "error": null
+  },
+  "T4": {
+   "id": "T4",
+   "agent": "dependency",
+   "goal": "Map the dependencies and queue links of portfolio-svc, aa-sync, broker-gateway, portfolio-consumer and market-data: which services call which, which publish to or consume from portfolio-updates, which rely on redis-cache, postgres, auth-kyc or external aggregator/broker APIs, and the sync data path from external source to the balance shown to the user in WhatsApp via orchestrator and msg-delivery. Identify which components are upstream and downstream so symptoms can be separated from possible causes.",
+   "hints": [
+    "Include sync, retry and timeout relationships between services",
+    "Note shared resources such as connection pools, caches and queues",
+    "Mark which services are single points of failure on the balance refresh path"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "The graph shows portfolio-svc depends heavily on postgres (weight 0.8) and lightly on redis-cache (0.2), and is called by orchestrator and web-app. The sync loop is aa-sync publishing to portfolio-updates, portfolio-consumer consuming from it, and portfolio-consumer calling aa-sync synchronously (0.8), with aa-sync also calling postgres (0.7). The only change records in the window are deploys, and none of the four touches these edges before the 12:55 onset. Broker-gateway, market-data, auth-kyc, msg-delivery and the external APIs were not mapped, so the path from external source to WhatsApp is only partly verified.",
+   "error": null
+  },
+  "T5": {
+   "id": "T5",
+   "agent": "dependency",
+   "goal": "Find past incidents with similar symptoms (stale portfolio balances, sync errors, portfolio-updates queue backlog, aa-sync or broker-gateway failures, cache staleness) and summarize their symptoms, what was eventually found to be the cause, and how they were resolved. Treat them as hints only and note how well each matches the current onset and error pattern.",
+   "hints": [
+    "Search by symptom keywords and by the services and queues involved",
+    "Note which signals distinguished the true cause in each past case"
+   ],
+   "depends_on": [],
+   "origin": "plan",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "Past-incident search found no incident with the same queue-backlog or aa-sync/broker-gateway pattern. The closest match is INC-0412 (2026-01-18), where a Redis restart evicted hot context and caused a cache stampede on portfolio-svc, producing late balance notifications. That fits the cache-staleness hypothesis, but it is a hint only: this incident's onset is 12:55 UTC and I have not confirmed any redis-cache or portfolio-svc change in the current window. INC-0388 (aa-sync, bank-side FIP downtime) and INC-0431 (order-router validation regression) do not match the current symptoms well.",
+   "error": null
+  },
+  "T6": {
+   "id": "T6",
+   "agent": "observability",
+   "goal": "Pull 1-minute time-series from 12:30 to 13:15 for aa-sync pool_in_use, err_rate and latency_ms, and for portfolio-consumer err_rate and rps. Also pull aa-sync logs at all levels (WARN/INFO, not just ERROR) from 12:40 to 12:57 and look for 503 responses, slow requests or queued-request lines. State which series departs from baseline first. Cross-check clock alignment using a non-clock-dependent source, such as RabbitMQ redelivered/unacked counts or aa-sync request counts versus consumer-side call counts.",
+   "hints": [
+    "Consumer-side failures that blame aa-sync (503 at 12:51:50, timeouts at 12:52:18) predate the first aa-sync ERROR (12:56:08) and the reported 12:55 onset. E-001 says aa-sync logged no ERROR before 12:56:08, yet aa-sync was apparently already returning 503s, so either clock skew, a different cause, or the pool filling gradually. E-010 only assumes aa-sync failed first, and the evidence is whole-window summaries."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C1",
+   "status": "done",
+   "attempts": 1,
+   "summary": "aa-sync's pool_in_use, latency_ms and err_rate all depart from baseline together at 12:50 UTC, and pool_in_use reaches its 100 cap at 12:55. portfolio-consumer err_rate departs one minute later, at 12:51, while its rps stays flat within baseline. aa-sync logs show slow holdings_snapshot queries from 12:50:17 and the first ERROR at 12:56:08, but no 503 or timeout lines, so the consumer-side 503 at 12:51:50 and timeouts at 12:52:18 are not confirmed from aa-sync's side. The aa-sync-first ordering is consistent with the metrics, but clock alignment is unverified because I did not cross-check against RabbitMQ redelivery or request counts.",
+   "error": null
+  },
+  "T7": {
+   "id": "T7",
+   "agent": "observability",
+   "goal": "Get RabbitMQ portfolio-updates publish rate, deliver/ack rate, unacked count and redelivered count at 1-minute resolution from 12:30 to 13:15, to see whether inbound load on aa-sync rose before the pool saturated. Also get aa-sync inbound request rate per caller and any aa-sync logs showing downstream (postgres or aggregator/bank API) call durations and errors, and check whether the errors concentrate on particular banks or FIPs. Also retrieve portfolio-consumer ERROR-level logs, avoiding the truncation by narrowing to 12:45 to 12:58.",
+   "hints": [
+    "H3 and H2 are not ruled out. Redeliveries began first, and a redelivery storm could inflate aa-sync load (the aa-sync to queue to consumer to aa-sync loop), with the pool exhaustion as a consequence. Alternatively, aa-sync's outbound calls to postgres or the external aggregator/bank APIs could be slow. Postgres metrics look healthy, but the external API path and aa-sync's per-call downstream latency were never examined. The consumer's rps stayed flat, and no publish rate, consume rate, unacked count or prefetch data was retrieved."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C2",
+   "status": "done",
+   "attempts": 1,
+   "summary": "aa-sync's earliest visible signal is slow holdings_snapshot queries from 12:50:17Z (171ms, rising to 747ms by 13:00:05Z). The first portfolio-consumer 'aa-sync call failed: HTTP 503' is at 12:51:50Z, and the first aa-sync pool-exhaustion ERROR is not until 12:56:08Z, so pool exhaustion does not look like the first failure. aa-sync's rps stayed in a narrow 33-37 band in the summary, which does not show an inbound load rise, though I have no time series to confirm onset. RabbitMQ publish, ack, unacked and redelivered metrics were not returned, so the queue-side part of the task is unverified.",
+   "error": null
+  },
+  "T8": {
+   "id": "T8",
+   "agent": "dependency",
+   "goal": "Query get_changes per service (aa-sync, portfolio-consumer, rabbitmq, postgres, redis-cache, broker-gateway) for 12:00 to 13:00 UTC across deploy, config, migration and flag, and search for third-party or account-aggregator maintenance notices, certificate or token expiries, and scheduled jobs around 12:45 to 12:56. Report explicitly whether results are complete or empty per service.",
+   "hints": [
+    "The change search shows only 3 unrelated deploys, but no per-service query was run for aa-sync, portfolio-consumer, rabbitmq, postgres or redis-cache. Config changes such as pool size, timeouts, retry or prefetch settings, credential or token expiry, scheduled jobs, and external aggregator/bank maintenance notices were not searched. A trigger for the pool exhaustion (for example, a pool-size or timeout change shortly before 12:51) would change which hypothesis is the root cause."
+   ],
+   "depends_on": [],
+   "origin": "critic",
+   "challenge_id": "C3",
+   "status": "done",
+   "attempts": 1,
+   "summary": "The all-kinds, all-services change query for 12:00-13:00 UTC returned one record: an auth-kyc log-level deploy at 12:25Z, which is not on the portfolio sync path. The result was complete (not truncated or partial), so no config, migration or flag change in that hour can explain the aa-sync pool exhaustion, and the pool-size/timeout trigger hypothesis is weakened. Searches for aggregator maintenance, token/certificate expiry and scheduled jobs returned only two past incidents, which are hypotheses and not current evidence.",
+   "error": null
+  },
+  "T9": {
+   "id": "T9",
+   "agent": "observability",
+   "goal": "Time-series at 1-minute resolution: does aa-sync pool_in_use and latency rise before portfolio-consumer err_rate and aa-sync call timeouts, or after them?",
+   "hints": [],
+   "depends_on": [],
+   "origin": "reasoning",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "At 1-minute resolution, aa-sync pool_in_use and latency_ms both leave baseline at 12:50Z, one minute before portfolio-consumer err_rate leaves baseline at 12:51Z. So the aa-sync degradation comes before the consumer errors, which fits aa-sync as the first failure. This is timing evidence only; it does not establish causation.",
+   "error": null
+  },
+  "T10": {
+   "id": "T10",
+   "agent": "observability",
+   "goal": "What are aa-sync's outbound calls (postgres queries, external AA/FIP APIs) holding connections, and are their durations elevated?",
+   "hints": [],
+   "depends_on": [],
+   "origin": "reasoning",
+   "challenge_id": null,
+   "status": "done",
+   "attempts": 1,
+   "summary": "aa-sync's outbound DB work is dominated by slow holdings_snapshot queries. Their logged durations rise from 171ms at 12:50:17Z to a plateau of roughly 700-777ms from about 13:00Z, and latency_ms climbs from about 87ms at 12:48 to about 700ms by 12:58. The pool reaches its maximum, which is consistent with connections being held longer. This is the earliest deviation I found, about 6 minutes before the first aa-sync pool-exhaustion ERROR at 12:56:08Z. The logs do not name postgres, and I did not query external AA/FIP API calls, so those remain unverified.",
+   "error": null
+  }
+ },
+ "challenges": {
+  "C1": {
+   "target": "H1",
+   "kind": "ordering_or_clock",
+   "objection": "Consumer-side failures that blame aa-sync (503 at 12:51:50, timeouts at 12:52:18) predate the first aa-sync ERROR (12:56:08) and the reported 12:55 onset. E-001 says aa-sync logged no ERROR before 12:56:08, yet aa-sync was apparently already returning 503s, so either clock skew, a different cause, or the pool filling gradually. E-010 only assumes aa-sync failed first, and the evidence is whole-window summaries.",
+   "requested_check": "Pull 1-minute time-series from 12:30 to 13:15 for aa-sync pool_in_use, err_rate and latency_ms, and for portfolio-consumer err_rate and rps. Also pull aa-sync logs at all levels (WARN/INFO, not just ERROR) from 12:40 to 12:57 and look for 503 responses, slow requests or queued-request lines. State which series departs from baseline first. Cross-check clock alignment using a non-clock-dependent source, such as RabbitMQ redelivered/unacked counts or aa-sync request counts versus consumer-side call counts.",
+   "agent": "observability",
+   "id": "C1",
+   "resolved": true
+  },
+  "C2": {
+   "target": "H3",
+   "kind": "alternative_explanation",
+   "objection": "H3 and H2 are not ruled out. Redeliveries began first, and a redelivery storm could inflate aa-sync load (the aa-sync to queue to consumer to aa-sync loop), with the pool exhaustion as a consequence. Alternatively, aa-sync's outbound calls to postgres or the external aggregator/bank APIs could be slow. Postgres metrics look healthy, but the external API path and aa-sync's per-call downstream latency were never examined. The consumer's rps stayed flat, and no publish rate, consume rate, unacked count or prefetch data was retrieved.",
+   "requested_check": "Get RabbitMQ portfolio-updates publish rate, deliver/ack rate, unacked count and redelivered count at 1-minute resolution from 12:30 to 13:15, to see whether inbound load on aa-sync rose before the pool saturated. Also get aa-sync inbound request rate per caller and any aa-sync logs showing downstream (postgres or aggregator/bank API) call durations and errors, and check whether the errors concentrate on particular banks or FIPs. Also retrieve portfolio-consumer ERROR-level logs, avoiding the truncation by narrowing to 12:45 to 12:58.",
+   "agent": "observability",
+   "id": "C2",
+   "resolved": true
+  },
+  "C3": {
+   "target": "H1",
+   "kind": "missing_coverage",
+   "objection": "The change search shows only 3 unrelated deploys, but no per-service query was run for aa-sync, portfolio-consumer, rabbitmq, postgres or redis-cache. Config changes such as pool size, timeouts, retry or prefetch settings, credential or token expiry, scheduled jobs, and external aggregator/bank maintenance notices were not searched. A trigger for the pool exhaustion (for example, a pool-size or timeout change shortly before 12:51) would change which hypothesis is the root cause.",
+   "requested_check": "Query get_changes per service (aa-sync, portfolio-consumer, rabbitmq, postgres, redis-cache, broker-gateway) for 12:00 to 13:00 UTC across deploy, config, migration and flag, and search for third-party or account-aggregator maintenance notices, certificate or token expiries, and scheduled jobs around 12:45 to 12:56. Report explicitly whether results are complete or empty per service.",
+   "agent": "dependency",
+   "id": "C3",
+   "resolved": true
+  }
+ },
+ "gaps": [
+  {
+   "id": "G1",
+   "description": "query_metrics(aa-sync): invalid_input",
+   "call_id": "T9-02",
+   "resolved": true
+  }
+ ],
+ "notes": [
+  "Time-series points were not requested, so I could not confirm the exact onset minute for aa-sync err_rate/latency or portfolio-consumer err_rate. The 12:25-12:55 baseline vs. after-12:55 comparison is therefore unverified.",
+  "The aa-sync log query was truncated at 100 of 170 matches, covering only up to 13:15:59Z. Later errors and any other error types were not seen.",
+  "No ERROR logs were retrieved for portfolio-consumer, portfolio-svc, or broker-gateway, so their error messages, codes, and upstream targets are unknown. Absence of logs here is not evidence of health.",
+  "Error types beyond aa-sync pool exhaustion (timeouts, auth, 5xx, schema/parse) and upstream targets were not identified.",
+  "Metric summaries cover the full 12:00-14:00 window only, so they cannot show baseline-vs-incident deltas directly.",
+  "The aa-sync log line format (\"100/99 connections in use\") is ambiguous about which number is the pool max. I quoted it verbatim and did not interpret it.",
+  "Clock skew between services was not assessed, and no queue metrics (portfolio-updates depth, redeliveries, DLQ) were retrieved.",
+  "No portfolio-updates publish rate, consume rate, unacked count, prefetch, or dead-letter metrics were returned, so the queue analysis relies only on the depth log lines.",
+  "Did not compare inbound-msgs or outbound-msgs, so I cannot say whether the problem is isolated to portfolio-updates.",
+  "Did not check portfolio-consumer restarts or crash logs at ERROR level outside the WARN query window. Consumer count stayed at 3, which argues against crashes, but restarts are unverified.",
+  "Did not query redis key TTL or expiry for portfolio balance keys, so stale-cache serving is unverified.",
+  "Did not query aa-sync logs or metrics, so the cause of the 503s and timeouts is unknown.",
+  "The rabbitmq depth log lines start at 12:57:07; no depth lines appear before that time, which may mean depth was low earlier or that lines are only emitted above a threshold. This is unverified.",
+  "The portfolio-consumer WARN query was truncated at 100 lines of 265 matches, so the window is incomplete; only the first 100 lines (to 13:06:55) were read.",
+  "No get_dependencies was run for portfolio-svc, broker-gateway, redis-cache, postgres or rabbitmq, so their callers, callees and queue edges are unknown.",
+  "No change records were queried for an individual service, so the empty config/migration/flag result may reflect the tool's coverage rather than a true absence. Scheduled jobs, TTL changes, token or certificate expiries, and rabbitmq or redis config were not directly verified.",
+  "No broker-side or account-aggregator maintenance notices or third-party changes were searched for, which is a gap given the aa-sync symptoms.",
+  "The web-app dependency graph is unknown, so its 13:00Z deploy is judged unlikely to be causal from its description alone.",
+  "Past incident results (INC-0412, INC-0431) are historical hypotheses and were not confirmed against current data.",
+  "Dependencies for broker-gateway, market-data, auth-kyc, msg-delivery, orchestrator, redis-cache, postgres and rabbitmq were not retrieved (budget was spent on the four calls), so the external aggregator and broker API path and the msg-delivery leg to WhatsApp are unverified.",
+  "The graph gives no timeout, retry, connection pool or cache TTL data, so the sync and retry relationships in the hint are not confirmed.",
+  "Call weights are given without units or semantics, so their meaning is unclear.",
+  "search_incidents was not run, so no past incidents were checked against this topology.",
+  "get_changes returned deploys only in the window. Whether config, migration or flag changes exist is unverified beyond the empty result.",
+  "Past-incident search only returns keyword matches. source and url were null for all results, so the full postmortems could not be read.",
+  "No past incident about a portfolio-updates queue backlog was found, so the queue-specific hypothesis has no historical precedent in this search.",
+  "I did not run get_changes or get_dependencies, so I could not check whether a redis-cache, portfolio-svc or aa-sync change occurred near 12:55 UTC. The INC-0412 match therefore rests on symptom similarity alone.",
+  "The search covered only 5 results per query, and returned only 2 to 3 distinct incidents, so the historical picture is thin.",
+  "Clock alignment is not verified. I did not query RabbitMQ redelivered/unacked counts or aa-sync request counts against consumer-side call counts, so the 12:50 vs 12:51 ordering rests on the metrics' own timestamps.",
+  "aa-sync logs for 12:40–12:57 contain no 503 responses and no request-timeout lines, so the consumer's 503 at 12:51:50 and timeouts at 12:52:18 are unverified from aa-sync's side. The query did not include a status-code or request-level filter, so it is unclear whether aa-sync logs individual HTTP responses at all.",
+  "aa-sync logs were queried only to 12:57. Log coverage for 12:57–13:15 is missing for this task, though pool and latency metrics are available there.",
+  "portfolio-consumer logs were not queried in this task, so its error timing and the redelivery and 503 lines in E-012 to E-015 are not checked here.",
+  "The rps metric shows no drop, but it is a 1-minute average and does not rule out short stalls. The consumer's unacked-message counts were not queried, so the redelivery pattern is not confirmed from a non-clock source.",
+  "RabbitMQ publish rate, deliver/ack rate, unacked count and redelivered count were not returned. The metric-less query gave only 4 summary metrics, and no points were requested for the queue metrics, so this part of T7 is unverified.",
+  "Per-caller aa-sync inbound request rate was not retrieved. The call budget was used up before that query.",
+  "No aa-sync time-series points were requested, so the earliest deviation in latency, pool_in_use and rps cannot be placed to the minute.",
+  "aa-sync WARN+ logs for 12:30-13:15 (149 lines, not truncated) show no bank-API or aggregator call-duration lines. INFO and DEBUG were not queried, so per-bank call durations are unverified.",
+  "The 'fip' search returned no results, which is not evidence that errors are not concentrated on particular banks or FIPs. Bank or FIP concentration is unverified.",
+  "Which downstream store holdings_snapshot belongs to is not named in the logs. postgres was reported healthy in the earlier summaries, so this is unresolved.",
+  "Query-level p95 or p99 data for aa-sync's downstream calls was not retrieved.",
+  "Per-service get_changes calls for aa-sync, portfolio-consumer, rabbitmq, postgres, redis-cache and broker-gateway were not run separately; the service-null query already covered them with complete results, so budget was not spent on duplicates.",
+  "The change tool does not show live config values (pool size, timeouts, retry, prefetch) or their history, so a config change that was not recorded as a change record cannot be ruled out.",
+  "No tool checks external aggregator/bank maintenance notices, certificate or token expiry dates, or scheduled jobs. The two incident searches returned only past incidents, so these remain unverified.",
+  "The 12:45-12:56 scheduled-job window was not checked directly, because the available tools do not expose cron or job schedules.",
+  "The query_metrics call for aa-sync 'latency' failed (invalid_input; the valid name is latency_ms). It was retried as latency_ms, which succeeded (T9-04).",
+  "aa-sync err_rate and call timeouts were not queried at 1-minute resolution, so the timeout onset is taken from log claim E-014 (12:52:18Z) and not from a time series.",
+  "portfolio-consumer redeliveries and queue depth were not queried as time series, so their timing relative to the pool rise is not verified here.",
+  "The query window was 12:40-13:15Z. The aa-sync latency peak of 777 ms in E-004 is not reproduced in this window (max 747.109), so it probably occurs outside the sub-window or comes from a different query. This is not reconciled.",
+  "The 1-minute ordering is a single-minute lead on sampled metrics and could move with scrape jitter or clock skew. The source host clocks were not checked.",
+  "External AA/FIP API call durations were not queried. The WARN query filtered on 'ms' and returned only holdings_snapshot lines, and INFO-level external call logs were not checked. External-call elevation is therefore unverified.",
+  "The slow-query log lines name holdings_snapshot but not postgres, and the 'postgres' search returned zero lines, so the database identity of the slow calls is inferred.",
+  "Log lines appear in near-duplicate pairs (for example 12:50:17Z and 12:50:56Z), so per-query counts may be inflated. I did not check whether this is duplication or separate queries.",
+  "I have no per-bank or per-FIP breakdown, so I cannot tell whether slowness is platform-wide or concentrated, which matters for the INC-0388 comparison.",
+  "I have no baseline for err_rate and no point series for pool_in_use, so the exact onset of pool saturation is only known from E-001 (12:56:08Z)."
+ ],
+ "rejected": []
+}

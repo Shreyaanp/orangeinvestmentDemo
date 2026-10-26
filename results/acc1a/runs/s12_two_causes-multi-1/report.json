@@ -1,0 +1,644 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Two independent problems were found. The slowness and token-cost alert are most probably caused by an orchestrator agent loop that repeats get_holdings (x38 per session, 195 aborts logged) and multiplies LLM calls per request, starting around 10:55 with flat rps and no llm-gateway change. The blank notifications most probably come from a separate cause: msg-delivery's 11:24 'notification template refactor' deploy, after which renders fail on missing variable 'portfolio_value' from 11:25. The blank notifications began about 30 minutes after the token and latency onset, and msg-delivery logged no render failures before 11:25 (a query that ended at 11:24:59). The trigger for the orchestrator loop is not identified, and the msg-delivery diff is not available, so the template cause rests on timing and log content.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "orchestrator enters an agent loop (get_holdings repeated x38 per session, 195 aborts) that multiplies LLM calls per request, driving llm-gateway token usage and orchestrator latency up from 10:55 with flat rps and no llm-gateway fault or change.",
+   "component": "orchestrator",
+   "cause_type": "agent_tool_call_loop",
+   "score": 5.75,
+   "confidence": 0.742,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "Orchestrator logged an agent loop abort for repeated get_holdings x38 in one session starting 10:55:20Z. 195 abort lines were logged through 11:59:51Z, and the query was complete.",
+     "evidence_ids": [
+      "E-015",
+      "E-072",
+      "E-073"
+     ]
+    },
+    {
+     "text": "Token usage and orchestrator latency both first deviated in the 10:55 bucket, with tokens later pinned at 400000 and latency roughly doubled to about 2000 ms. llm-gateway usage first exceeded the alert threshold at 10:55:52Z, shortly after the loop began.",
+     "evidence_ids": [
+      "E-001",
+      "E-003",
+      "E-004",
+      "E-016",
+      "E-002"
+     ]
+    },
+    {
+     "text": "Request volume was flat (rps 51.7-58.3), so per-request work rather than traffic is the more likely driver. Orchestrator-to-llm-gateway upstream timeouts began at 10:58:17Z, consistent with extra LLM load. Orchestrator's heaviest dependency is llm-gateway (weight 0.7), making it the main path to token cost.",
+     "evidence_ids": [
+      "E-007",
+      "E-018",
+      "E-028"
+     ]
+    },
+    {
+     "text": "llm-gateway fallback and parse-failure rates were flat, which argues against a fallback or parse-failure explanation. This points to extra calls rather than a gateway fault.",
+     "evidence_ids": [
+      "E-009"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The loop's trigger is unexplained. It is an assumption that the loop is generated inside orchestrator because portfolio-svc logged nothing relevant. A prompt or tool-schema change in orchestrator is not ruled out, because the change feed does not track those.",
+     "evidence_ids": [
+      "E-078",
+      "E-086",
+      "E-031"
+     ]
+    },
+    {
+     "text": "The 400000 tokens_per_min plateau may be a metric ceiling or clamp, so the true peak and cost are unknown. Metric buckets are 5 minutes wide, so the exact onset order within 10:55 cannot be resolved.",
+     "evidence_ids": [
+      "E-011",
+      "E-017",
+      "E-010"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "msg-delivery's 11:24 'notification template refactor' deploy broke rendering (template needs variable 'portfolio_value' that the payload does not supply), so notifications are sent with empty bodies from 11:25, independent of the slowness and token problem.",
+   "component": "msg-delivery",
+   "cause_type": "bad_code_release_template_regression",
+   "score": 5.088,
+   "confidence": 0.718,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "msg-delivery deployed 'notification template refactor' at 11:24:00Z. It was the only msg-delivery change in the window, and the change query was complete.",
+     "evidence_ids": [
+      "E-023",
+      "E-067",
+      "E-068"
+     ]
+    },
+    {
+     "text": "msg-delivery err_rate jumped from about 0.004 to 0.084 at 11:25. The first render failure on missing variable 'portfolio_value' was logged at 11:25:18Z, and the first 'empty body' warning at 11:26:06Z.",
+     "evidence_ids": [
+      "E-005",
+      "E-012",
+      "E-013"
+     ]
+    },
+    {
+     "text": "Restarts stayed at 0 and memory stayed in a narrow band, which argues against a crash or memory-pressure explanation.",
+     "evidence_ids": [
+      "E-008"
+     ]
+    },
+    {
+     "text": "msg-delivery logged zero render-failure, missing-variable or empty-body lines from 10:55 to 11:24:59, even though the orchestrator loop was already running. This fits failures starting after the deploy rather than with the loop.",
+     "evidence_ids": [
+      "E-060",
+      "E-061",
+      "E-062"
+     ]
+    },
+    {
+     "text": "It is likely that failed renders are redelivered rather than dropped, based on a manual count of redelivery warnings (approximate).",
+     "evidence_ids": [
+      "E-021"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The causal link rests on timing and the deploy note alone. The diff is unavailable, so it is unverified whether the refactor made portfolio_value required or whether the orchestrator payload changed.",
+     "evidence_ids": [
+      "E-070",
+      "E-067"
+     ]
+    },
+    {
+     "text": "The zero-match queries ended at 11:24:59, before the first failure, so they cannot test whether the deploy caused the failures. They are also exact-string matches only. It is not checked whether only some payloads lack portfolio_value, and the logs carry no user or message type.",
+     "evidence_ids": [
+      "E-065",
+      "E-071",
+      "E-022"
+     ]
+    },
+    {
+     "text": "The blank-notification count is not established because the logs are truncated (257 matches, 200 shown).",
+     "evidence_ids": [
+      "E-014"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "The orchestrator agent loop aborts before obtaining holdings, so it publishes payloads without portfolio_value to outbound-msgs and msg-delivery fails to render them, linking blank notifications to the token and latency problem rather than the deploy.",
+   "component": "orchestrator",
+   "cause_type": "incomplete_payload_from_aborted_agent_loop",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Orchestrator publishes to outbound-msgs, which msg-delivery consumes. In principle incomplete orchestrator payloads could produce render failures downstream.",
+     "evidence_ids": [
+      "E-027",
+      "E-015"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Render failures were absent from 10:55 to 11:24:59 while the loop was already aborting, which contradicts the prediction that incomplete payloads would fail rendering from about 10:55.",
+     "evidence_ids": [
+      "E-060",
+      "E-061",
+      "E-062",
+      "E-065"
+     ]
+    },
+    {
+     "text": "Orchestrator publish logging is not confirmed, so the absence of portfolio_value or outbound-msgs lines there does not show the payloads were complete.",
+     "evidence_ids": [
+      "E-066"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H4",
+   "statement": "An upstream trigger such as a prompt or tool-schema change in orchestrator, or a portfolio-svc/redis-cache data issue (cache misses, slowlog), caused get_holdings results to be unusable and started the loop at 10:55.",
+   "component": "portfolio-svc",
+   "cause_type": "upstream_data_or_cache_degradation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "A few portfolio-svc holdings cache-miss WARNs (first at 10:32:38Z) and redis-cache slowlog WARNs (first at 10:39:16Z) occurred before the loop. This is only a weak temporal association.",
+     "evidence_ids": [
+      "E-049",
+      "E-051",
+      "E-059"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "portfolio-svc latency and error rate were flat, redis-cache latency was flat, and redis-cache evicted_keys stayed at 0. This argues against an upstream data or cache degradation.",
+     "evidence_ids": [
+      "E-052",
+      "E-053",
+      "E-054",
+      "E-056"
+     ]
+    },
+    {
+     "text": "No portfolio-svc get_holdings WARN or ERROR lines were logged, and no portfolio-svc changes were recorded in the window or the roughly 22 hours before it.",
+     "evidence_ids": [
+      "E-074",
+      "E-079",
+      "E-080"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "llm-gateway tokens_per_min was at baseline (about 42k) through 10:50 UTC and first deviated in the 10:55 UTC bucket.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "llm-gateway tokens_per_min reached 400000.0 at 11:00 UTC and stayed at exactly that value through 11:55 UTC.",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "orchestrator latency_ms was flat around 880-910 ms through 10:50 UTC and first deviated in the 10:55 UTC bucket.",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "orchestrator latency_ms roughly doubled by 11:00 UTC and stayed around 2000-2090 ms through the end of the window.",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "msg-delivery err_rate was at baseline (about 0.004) through 11:20 UTC and first jumped to 0.084 at 11:25 UTC, about 30 minutes after the token and latency deviation.",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "orchestrator rps stayed in a narrow band (51.7 to 58.3) over the window, which weakens the idea that a traffic-volume spike caused the token increase.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "msg-delivery restarts_5m stayed at 0 and memory_pct stayed in a narrow band, which weakens a crash or memory-pressure explanation for the error spike.",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "llm-gateway fallback_pct and parse_fail_pct were flat across the window, which weakens a fallback or parse-failure explanation for the token rise.",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "msg-delivery first logs a template render failure on missing variable 'portfolio_value' at 11:25:18Z.",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "First 'notification sent with empty body' warning in the window, 8 seconds after the first render failure.",
+   "evidence_ids": [
+    "E-013"
+   ]
+  },
+  {
+   "text": "Empty-body and render-failure lines continue through the end of the visible msg-delivery results, but the result is truncated (257 matches, 200 shown), so the total is not fully known.",
+   "evidence_ids": [
+    "E-014"
+   ]
+  },
+  {
+   "text": "Orchestrator begins logging an agent loop (repeated get_holdings x38) at 10:55:20Z, about 30 seconds before the token alert.",
+   "evidence_ids": [
+    "E-015"
+   ]
+  },
+  {
+   "text": "llm-gateway token usage first exceeds the alert threshold at 10:55:52Z, at 101905 tokens/min, and climbs to the 400000 value by 11:00:23Z.",
+   "evidence_ids": [
+    "E-016"
+   ]
+  },
+  {
+   "text": "Token usage stays pinned at the 400000 tokens/min value from 11:00 onward, which may be a metric or log ceiling rather than a true rate.",
+   "evidence_ids": [
+    "E-017"
+   ]
+  },
+  {
+   "text": "Orchestrator upstream calls to llm-gateway start timing out at 10:58:17Z, after the loop began, which is consistent with the loop generating extra LLM load.",
+   "evidence_ids": [
+    "E-018"
+   ]
+  },
+  {
+   "text": "msg-delivery deployed 'notification template refactor' at 11:24 UTC, about 16 minutes before the 11:40 report. This is the closest change to the blank-notification symptom.",
+   "evidence_ids": [
+    "E-023"
+   ]
+  },
+  {
+   "text": "Orchestrator publishes to the outbound-msgs queue, which the notification path depends on.",
+   "evidence_ids": [
+    "E-027"
+   ]
+  },
+  {
+   "text": "Orchestrator calls llm-gateway with the highest call weight of its dependencies. This makes llm-gateway the main path to the token cost, and no changes were recorded for llm-gateway.",
+   "evidence_ids": [
+    "E-028"
+   ]
+  },
+  {
+   "text": "Earliest portfolio-svc WARN in 10:30-11:00 is a holdings cache miss at 10:32:38Z. Three cache-miss WARNs appear in total (10:32:38, 10:39:07, 10:47:18), not truncated.",
+   "evidence_ids": [
+    "E-049"
+   ]
+  },
+  {
+   "text": "Redis-cache logged a slowlog WARN at 10:39:16Z. Two more slowlog WARNs follow (10:40:41Z, 10:44:56Z), not truncated.",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "Portfolio-svc latency_ms summary over 10:30-11:00 stayed in a narrow band (max 127.103 ms).",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "Portfolio-svc err_rate summary stayed between 0.002 and 0.004 over the window.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "Redis-cache latency_ms summary stayed between 1.888 and 2.143 ms over the window.",
+   "evidence_ids": [
+    "E-054"
+   ]
+  },
+  {
+   "text": "Redis-cache evicted_keys was 0 for the whole window, which weakens an eviction-driven cache-stampede explanation.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "msg-delivery returned zero matches for 'template render failed' in the 10:55–11:24:59 UTC window (exact count 0, complete result).",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "msg-delivery returned zero matches for 'missing variable' in the same window (exact count 0, complete result).",
+   "evidence_ids": [
+    "E-061"
+   ]
+  },
+  {
+   "text": "msg-delivery returned zero matches for 'empty body' in the same window (exact count 0, complete result).",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "The only msg-delivery change in 10:00-12:00Z is deploy msg-delivery-00290 at 11:24:00Z with note 'notification template refactor'. The record has no source or url, so the diff, commit, PR and rollback target are not available from this feed.",
+   "evidence_ids": [
+    "E-067"
+   ]
+  },
+  {
+   "text": "The msg-delivery change query is complete: one item, not truncated and not partial. No config, migration or flag change was returned for msg-delivery in the window.",
+   "evidence_ids": [
+    "E-068"
+   ]
+  },
+  {
+   "text": "Orchestrator logged a loop-abort ERROR for repeated get_holdings. The first occurrence is at 10:55:20Z, and the query returned 195 matching lines with no truncation or partial result.",
+   "evidence_ids": [
+    "E-072"
+   ]
+  },
+  {
+   "text": "The abort-filtered query returned the same 195 orchestrator ERROR lines, with the last at 11:59:51Z. Its result is not truncated and not partial, and the 'total' field is 195.",
+   "evidence_ids": [
+    "E-073"
+   ]
+  },
+  {
+   "text": "Over the full 10:00-12:00 window there were no portfolio-svc WARN or ERROR lines containing get_holdings. The result is complete, so no get_holdings error or empty-data warnings were logged by portfolio-svc.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "No portfolio-svc change was recorded in the 10:00-11:00 UTC window, across the requested kinds deploy, config, migration and flag.",
+   "evidence_ids": [
+    "E-079"
+   ]
+  },
+  {
+   "text": "No portfolio-svc change was recorded in the roughly 22 hours before the window (2026-03-26 12:00 to 2026-03-27 10:00 UTC).",
+   "evidence_ids": [
+    "E-080"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "Tokens and orchestrator latency likely moved together, since they both first deviated in the same 10:55 bucket. Per-request token growth, not request volume, is the more likely driver given the flat rps. Neither has been confirmed.",
+   "evidence_ids": [
+    "E-010"
+   ]
+  },
+  {
+   "text": "The 400000.0 plateau on tokens_per_min may be a metric ceiling or clamp, not a true measured value. This should be checked before the figure is used for spend estimates.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  },
+  {
+   "text": "Roughly 79 'notification sent with empty body' warnings and roughly 90 'template render failed' errors appear in the 200 visible msg-delivery lines (manual count, approximate). About 25 'redelivered 9-10 messages on outbound-msgs' warnings appear in the same window, which suggests failed renders are being redelivered and retried rather than dropped.",
+   "evidence_ids": [
+    "E-021"
+   ]
+  },
+  {
+   "text": "The logs carry no user ID or message type, so correlation of blank notifications with specific users, message types or LLM responses cannot be determined from these results.",
+   "evidence_ids": [
+    "E-022"
+   ]
+  },
+  {
+   "text": "No config, prompt, model, max-token, retry or rate-limit change appears in the window. This reflects the absence of records, not a verified absence of changes in those systems.",
+   "evidence_ids": [
+    "E-031"
+   ]
+  },
+  {
+   "text": "The cluster of events around 10:39 (portfolio-svc cache miss at 10:39:07Z and redis-cache slowlog at 10:39:16Z) is a weak temporal association only, not evidence that redis caused the cache misses.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "The zero msg-delivery matches are consistent with H2 (render failures begin after 11:24) and, because the agent loop began at 10:55, they weaken H3's prediction that incomplete payloads would produce render failures from about 10:55.",
+   "evidence_ids": [
+    "E-065"
+   ]
+  },
+  {
+   "text": "Zero orchestrator matches for 'portfolio_value' and 'outbound-msgs' may reflect that these payload fields and publishes are not logged at all, not that the publishes were complete.",
+   "evidence_ids": [
+    "E-066"
+   ]
+  },
+  {
+   "text": "The 11:24 template refactor is the likely source of the 'portfolio_value' render failures that begin at 11:25:18Z. This rests on timing and the deploy note alone. The diff is not available, so it is unverified whether the refactor made portfolio_value required or whether the orchestrator payload changed.",
+   "evidence_ids": [
+    "E-070"
+   ]
+  },
+  {
+   "text": "Only some payloads may lack portfolio_value. Successful renders for other message types would support this, but I did not check logs for them, so it is unverified.",
+   "evidence_ids": [
+    "E-071"
+   ]
+  },
+  {
+   "text": "Because the orchestrator loop keeps repeating get_holdings with no portfolio-svc error or empty-data warning logged, the loop is probably generated inside orchestrator and not caused by portfolio-svc failures. This is unverified because the portfolio-svc payloads were not inspected.",
+   "evidence_ids": [
+    "E-078"
+   ]
+  },
+  {
+   "text": "A prompt or tool-schema change in orchestrator is not ruled out. get_changes does not track prompt or tool-schema versions, and no orchestrator config record appeared in the window, so this is absence of records rather than a verified absence of change.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The trigger for the orchestrator get_holdings loop at 10:55 is unknown. A prompt or tool-schema change is not ruled out, because the change feed does not track those, and no per-session loop call lines were returned.",
+  "The msg-delivery-00290 diff is unavailable. Whether the template newly requires portfolio_value, or whether the orchestrator payload changed, is unverified, and the exact blank-notification count is unknown (msg-delivery logs truncated at 200 of 257 lines).",
+  "Orchestrator logs are truncated (269 total, 200 shown, to 11:42:51Z), so the loop's end time is unknown. The 195 aborts and their roughly 3 per minute average are a derived figure.",
+  "The 400000 tokens_per_min plateau may be a clamp, so the peak and spend are unknown. Only a single latency_ms metric exists, so no p50/p95/p99 split. The 5-minute metric buckets cannot resolve onset order within 10:55.",
+  "The queue metrics for outbound-msgs (depth, redelivery, dead-letter) were not returned, so lag is unverified. No LLM completion content is logged, and no breakdown by endpoint, model, tenant or user was done.",
+  "portfolio-svc and redis-cache were checked only through WARN logs and summary metrics. The redis hit_ratio max of 1.014 looks like an artifact, and the INC-0412 history is a hint only.",
+  "Several services (wa-webhook, web-app, postgres, rabbitmq, aa-sync) were not queried, so the blast radius and the caller path into orchestrator are only partly mapped. Changes after 11:00 UTC were not checked for the orchestrator side, and earlier history had limited coverage.",
+  "No query_logs calls were made, so the cause of the token and latency rise is unexplained. Logs are needed to see which endpoint, model or tenant is responsible.",
+  "The task asked for p50, p95 and p99. Only a single latency_ms metric was found for orchestrator and llm-gateway, so no percentile split was possible.",
+  "No last-week comparison window was queried, so 'baseline' here means the 10:00-10:50 UTC values within this window only.",
+  "No breakdown by endpoint, model or tenant/user segment was done.",
+  "outbound-msgs was not queried, and no direct blank-notification metric was found. msg-delivery err_rate is only a proxy for blank notifications.",
+  "No spend-rate metric was found in llm-gateway, so the token-cost alert is only partly checked through tokens_per_min.",
+  "Metrics use 5-minute buckets, so the order of token and latency onset within 10:55 cannot be resolved. The true onset could lie anywhere in 10:50-10:55.",
+  "The 400000.0 value is an exact repeated plateau from 11:00 onward, which could be a clamp artefact.",
+  "The rabbitmq metrics result has no queue-specific series (depth, consumers, redeliveries, DLQ) for inbound-msgs, outbound-msgs or portfolio-updates, so queue lag and redelivery counts are unverified.",
+  "redis-cache hit rate and postgres latency were not queried.",
+  "msg-delivery results are truncated (257 total, 200 shown, stops at 11:52:16Z), so the exact count of blank notifications is not established and the tail of the window is missing.",
+  "orchestrator results are truncated (269 total, 200 shown, stops at 11:42:51Z), so the loop's end time is unknown.",
+  "No LLM response or completion content is logged, so empty or truncated completions cannot be confirmed or ruled out.",
+  "The token-usage value stuck at 400000 may be a cap in the metric, so the true peak token rate is unknown.",
+  "The config, migration and flag kinds returned no records. Whether the change feed covers config, prompt and model settings at all is unverified, so absence of such changes is not proof.",
+  "Every change record has source and url set to null, so authors and sources could not be reported.",
+  "I only queried dependencies for msg-delivery and orchestrator. llm-gateway, the callers of orchestrator, and the other services were not checked, so the blast radius is only partly mapped.",
+  "The get_changes call used the 2026-03-26 10:00 to 2026-03-27 12:00 window, so changes earlier than 24 hours before onset were not seen.",
+  "I did not call search_incidents, so no past incidents were compared against these changes.",
+  "wa-webhook, aa-sync, order-router, portfolio-consumer, web-app, postgres and rabbitmq were not queried, so their edges, including who produces inbound-msgs and which service consumes portfolio-updates, are unknown.",
+  "No caller of orchestrator appeared in T4-01, so the wa-webhook to orchestrator call path is unverified.",
+  "Dependencies for redis-cache, postgres and rabbitmq (who depends on them) were not retrieved, so the shared-dependency mapping is incomplete.",
+  "Fallback and retry paths were not visible in the tool output. Sync-versus-async edges are only as complete as the get_dependencies results.",
+  "The search_incidents tool was not used, and the tool-call budget is exhausted, so past incidents for these symptoms are unchecked.",
+  "Onset times for slowness and token cost are not established in this task. The 10:33 orchestrator deploy and the 10:16 redis-cache deploy cannot be confirmed as preceding onset without log or metric data.",
+  "Searches for llm-gateway, msg-delivery, orchestrator, and portfolio-consumer keywords returned nothing relevant; the incident index may not cover these services or terms.",
+  "Past incident records have null source and url fields and only dates, not timestamps, so they cannot be time-correlated with the current incident window (2026-03-27 10:00 to 12:00 UTC).",
+  "No change, config, or dependency data was gathered by this agent, so it cannot be confirmed whether the INC-0412 or INC-0431 failure pattern is present now.",
+  "Search budget was limited to four calls, so terms such as prompt cache, token budget, and outbound-msgs were not tried separately.",
+  "Metrics were requested as summaries only (no points), so I cannot tell when portfolio-svc or redis-cache latency or err_rate first deviated, or whether the 10:55 loop coincided with any change in them.",
+  "My orchestrator query matched only the literal 'get_holdings' and was bounded at 10:55:20Z, so it cannot show the loop itself. I did not search orchestrator logs for timeout, empty-result or error lines, so the absence of those before 10:55:20Z is unverified.",
+  "The 'get_holdings' search returned zero lines, which may mean orchestrator does not log tool names at the current level, not that no calls happened. Orchestrator logs at other levels were not checked.",
+  "No INFO, ERROR or DEBUG logs were queried for portfolio-svc or redis-cache, so only WARN-level lines are visible for those services. Their 3-line WARN counts are not evidence of a full absence of problems.",
+  "Redis-cache and portfolio-svc RPS was not compared with orchestrator get_holdings call volume, so I cannot tell whether portfolio-svc load rose during the loop.",
+  "No evidence linking blank notifications, token cost or the 10:55 loop to portfolio-svc or redis-cache was found in this window. Those links remain unverified.",
+  "The query window ends at 11:24:59 UTC, before the first recorded render failure at 11:25:18 UTC (E-012). The zero count therefore cannot test whether the 11:24 template deploy caused failures; a query from 11:24:00 to 11:40 is needed.",
+  "Zero matches only show these exact substrings are absent. Render-failure or empty-body lines could use different wording, so a broader query (for example level WARN+ on msg-delivery) would be needed to rule them out.",
+  "Orchestrator publish logging was not confirmed. Zero 'outbound-msgs' lines may mean publishes are not logged, so the absence is not evidence of complete payloads.",
+  "The 'portfolio_value' search only covers orchestrator logs. The payload's content at publish time was not checked, and no outbound-msgs queue metrics were queried for this task.",
+  "The summary-count checks in E-021 and E-014 came from other results and were not re-verified here.",
+  "The change record has source null and url null, so I could not get the diff, commit, PR link or rollback target for msg-delivery-00290. A source-control or deploy-system lookup is needed.",
+  "I could not check whether the template added portfolio_value as a required field. The pre-deploy template and the new template are both needed to answer this.",
+  "I have no log-query tool, so I did not check msg-delivery logs after 11:52Z or look for successful renders of other message types. Observability must cover this.",
+  "I did not query orchestrator's payload schema or its changes, so a schema change on the producer side is not ruled out. My only change query was filtered to msg-delivery.",
+  "The change query for msg-delivery was filtered to that service, so I did not confirm whether any other service changed in a way that affects its payloads.",
+  "The per-session get_holdings call count cannot be measured. The logs only contain the abort message with a fixed 'x38' value and no session ID, and the query did not return the individual get_holdings call lines.",
+  "The loop-abort rate is only a derived average. No time-series points were requested, so the per-minute distribution is unknown.",
+  "portfolio-svc metrics were requested as summaries only, without points. The timing of any latency or rps change relative to 10:55 cannot be confirmed, and no get_holdings endpoint-level error or latency metric was returned.",
+  "Empty or malformed payloads may not be logged as WARN. The WARN filter with 'get_holdings' found nothing, but that is not proof that portfolio-svc returned valid data.",
+  "No orchestrator retry or backoff log lines were queried, so it is not confirmed whether the aborts triggered retries to portfolio-svc or to llm-gateway.",
+  "get_changes covers only deploy, config, migration and flag records. It cannot show prompt text or tool-schema edits, so those remain unverified for orchestrator and portfolio-svc.",
+  "Change data was not requested for 11:00-12:00 UTC, so changes after the first 10:55 deviation are unchecked. This does not affect the pre-10:55 question but does leave the window open.",
+  "The tools return no response-format or schema diff for portfolio-svc. Whether get_holdings output is unusable can only be confirmed from portfolio-svc responses or orchestrator logs, which is outside this agent's tools.",
+  "The dependency result shows only the portfolio-svc edges. Whether the agent's get_holdings call uses the orchestrator-to-portfolio-svc edge (weight 0.4) is an inference from topology, not a traced call."
+ ],
+ "actions": [
+  {
+   "text": "Roll back msg-delivery-00290 (notification template refactor), or hotfix the template so portfolio_value is optional or has a default.",
+   "rationale": "Render failures on missing 'portfolio_value' and empty-body sends began right after this deploy, and it was the only msg-delivery change. The diff is not available, so confirm the rollback target in the deploy system and verify err_rate returns to about 0.004 afterwards.",
+   "evidence_ids": [
+    "E-023",
+    "E-012",
+    "E-013",
+    "E-005",
+    "E-067"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Contain the orchestrator get_holdings loop: cap tool calls per session or add a circuit breaker, and restart or roll back orchestrator to the last known-good configuration, including any prompt or tool-schema version changed around 10:55.",
+   "rationale": "The loop (x38 per session, 195 aborts) matches the onset of the token and latency rise, with flat rps and no llm-gateway change. The trigger is unidentified, so check prompt and tool-schema history before choosing the rollback target.",
+   "evidence_ids": [
+    "E-015",
+    "E-072",
+    "E-007",
+    "E-028",
+    "E-086"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check for a backlog of failed or redelivered messages on outbound-msgs and decide whether to replay or suppress blank notifications that were already sent.",
+   "rationale": "Redelivery warnings suggest failed renders are being retried. Queue depth, redelivery and dead-letter metrics were not returned, so the backlog is unverified.",
+   "evidence_ids": [
+    "E-021",
+    "E-020",
+    "E-029"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Investigate why the agent keeps calling get_holdings: inspect orchestrator tool-call traces, get_holdings payloads from portfolio-svc, and prompt and tool-schema version history.",
+   "rationale": "The loop is the likely driver of the cost and latency problem, but its trigger is unexplained. The change feed cannot show prompt or schema edits, so this needs orchestrator traces.",
+   "evidence_ids": [
+    "E-078",
+    "E-086",
+    "E-031",
+    "E-050"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add a render-time contract check or CI test for msg-delivery templates against the orchestrator payload schema, and alert on empty-body sends.",
+   "rationale": "A template refactor shipped a missing-variable failure that produced blank notifications instead of failing safe.",
+   "evidence_ids": [
+    "E-012",
+    "E-013",
+    "E-070"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerting on repeated tool calls per session and a per-request LLM call budget in orchestrator. Verify whether the 400000 tokens_per_min value is a clamp, and add a spend-rate metric.",
+   "rationale": "The loop ran for about an hour before it was addressed. The token plateau may hide the true peak, and no spend metric was available.",
+   "evidence_ids": [
+    "E-072",
+    "E-077",
+    "E-011",
+    "E-017"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Record source and url on change records so diffs, authors and rollback targets are available during incidents.",
+   "rationale": "All change records had null source and url, so the msg-delivery diff could not be reviewed.",
+   "evidence_ids": [
+    "E-067"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 41,
+  "tool_attempts": 41,
+  "llm_calls": 30,
+  "tokens_in": 239231,
+  "tokens_out": 55514,
+  "rounds": 2,
+  "elapsed_s": 227.1
+ },
+ "dropped_claims": 0
+}

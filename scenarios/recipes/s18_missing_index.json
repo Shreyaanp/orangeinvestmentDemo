@@ -1,0 +1,26 @@
+{
+  "id": "s18_missing_index",
+  "seed": 18,
+  "start": "2026-04-06T09:40:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Portfolio pages and syncs are slow or timing out since about 10:40. Connection pool alerts are firing.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "postgres", "cause_type": "missing_index_after_migration", "description": "A database migration rebuilt the holdings table without recreating its indexes, so queries do sequential scans and slow down; connection-pool exhaustion is a consequence."},
+      "effects": [
+        {"target": "postgres", "metric": "latency_ms", "op": "mul", "value": 10, "ramp_min": 6},
+        {"target": "postgres", "metric": "slow_queries", "op": "set", "value": 60, "ramp_min": 6},
+        {"target": "postgres", "metric": "pool_waiting", "op": "set", "value": 45, "ramp_min": 6},
+        {"target": "aa-sync", "metric": "pool_in_use", "op": "set", "value": 100, "ramp_min": 8, "after_min": 2}
+      ],
+      "logs": [
+        {"service": "postgres", "level": "WARN", "msg": "slow query: seq scan on holdings took {latency_ms}ms", "per_min": 6},
+        {"service": "aa-sync", "level": "ERROR", "msg": "connection pool exhausted: {pool_in_use}/{pool_max} connections in use", "per_min": 4, "after_min": 10, "decisive": false}
+      ],
+      "changes": [{"kind": "migration", "service": "postgres", "ref": "mig-20260406-0042", "note": "rebuild holdings table; indexes not recreated", "offset_min": -1}]
+    }
+  ],
+  "trap": "pool exhaustion in aa-sync looks like the cause but is an effect; the trigger was a migration, not a service deploy"
+}

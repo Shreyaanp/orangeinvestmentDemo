@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "rabbitmq",
+      "cause_type": "memory_alarm_flow_control",
+      "description": "A rabbitmq memory alarm blocked publishers (flow control), so aa-sync could publish few portfolio updates. The broker's own logs and memory metric are deliberately missing from the data.",
+      "onset": "2026-05-15T11:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "rabbitmq",
+          "level": "WARN",
+          "contains": "memory resource limit alarm set, blocking publishing connections",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-15T11:00:00Z",
+          "end": "2026-05-15T12:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": false,
+  "expected_status": "INCONCLUSIVE",
+  "trap": "the broker's logs and memory metric are missing; a producer deploy and a slow database are both plausible but unproven"
+}

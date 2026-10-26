@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "portfolio-svc",
+      "cause_type": "thread_pool_starvation",
+      "description": "portfolio-svc ran out of request threads (thread pool saturation), slowing requests. Evidence for this is deliberately missing from the data.",
+      "onset": "2026-03-26T13:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "portfolio-svc",
+          "level": "WARN",
+          "contains": "request thread pool saturated: 200/200 busy, queueing requests",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-26T13:00:00Z",
+          "end": "2026-03-26T14:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": false,
+  "expected_status": "INCONCLUSIVE",
+  "trap": "portfolio-svc logs are missing for the window; a deploy, a cache dip and a mild DB slowdown are all plausible"
+}

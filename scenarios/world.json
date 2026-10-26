@@ -1,0 +1,45 @@
+{
+  "services": {
+    "wa-webhook": {"rps": 60, "latency_ms": 80, "err_rate": 0.002, "info_logs": ["webhook received from whatsapp cloud api", "message {rid} enqueued to inbound-msgs"], "noise_logs": ["signature header missing on health probe"]},
+    "orchestrator": {"rps": 55, "latency_ms": 900, "err_rate": 0.004, "gauges": {"active_sessions": 320}, "info_logs": ["session {rid} step completed", "tool call dispatched for session {rid}"], "noise_logs": ["session {rid} resumed after idle"]},
+    "llm-gateway": {"rps": 70, "latency_ms": 1400, "err_rate": 0.006, "gauges": {"tokens_per_min": 42000, "fallback_pct": 0.01, "parse_fail_pct": 0.005}, "info_logs": ["completion ok model=primary", "completion ok request {rid}"], "noise_logs": ["provider latency above p95 for request {rid}"]},
+    "portfolio-svc": {"rps": 45, "latency_ms": 120, "err_rate": 0.003, "info_logs": ["holdings fetched for user {rid}"], "noise_logs": ["cache miss for holdings key {rid}"]},
+    "aa-sync": {"rps": 35, "latency_ms": 90, "err_rate": 0.004, "gauges": {"pool_in_use": 22, "pool_max": 100, "cpu_throttle_pct": 3}, "info_logs": ["aa fetch completed for consent {rid}", "normalized records published to portfolio-updates"], "noise_logs": ["consent {rid} refresh scheduled"]},
+    "broker-gateway": {"rps": 40, "latency_ms": 220, "err_rate": 0.005, "gauges": {"rate_limit_remaining": 900}, "info_logs": ["broker order status ok", "broker holdings sync ok"], "noise_logs": ["broker responded slowly once for request {rid}"]},
+    "order-router": {"rps": 20, "latency_ms": 180, "err_rate": 0.004, "info_logs": ["order {rid} accepted", "order {rid} routed to broker"], "noise_logs": ["order {rid} validation warning: price near circuit limit"]},
+    "market-data": {"rps": 120, "latency_ms": 30, "err_rate": 0.001, "gauges": {"price_age_s": 2}, "info_logs": ["price tick batch published", "feed heartbeat ok"]},
+    "auth-kyc": {"rps": 15, "latency_ms": 140, "err_rate": 0.003, "info_logs": ["kyc status check ok for user {rid}"], "noise_logs": ["otp resend requested for user {rid}"]},
+    "portfolio-consumer": {"rps": 40, "latency_ms": 150, "err_rate": 0.003, "info_logs": ["processed portfolio update {rid}"], "noise_logs": ["update {rid} had no changes"]},
+    "msg-delivery": {"rps": 55, "latency_ms": 250, "err_rate": 0.004, "gauges": {"memory_pct": 55, "restarts_5m": 0},"info_logs": ["whatsapp send ok id {rid}", "delivery receipt: delivered"], "noise_logs": ["delivery receipt delayed for id {rid}"]},
+    "web-app": {"rps": 90, "latency_ms": 160, "err_rate": 0.003, "info_logs": ["page render ok"]},
+    "redis-cache": {"rps": 400, "latency_ms": 2, "err_rate": 0.0005, "gauges": {"hit_ratio": 0.96, "memory_pct": 58, "evicted_keys": 0}, "noise_logs": ["slowlog entry {rid}"]},
+    "postgres": {"rps": 300, "latency_ms": 8, "err_rate": 0.0005, "gauges": {"pool_waiting": 0, "slow_queries": 1, "replication_lag_s": 0.4}, "info_logs": ["checkpoint complete"], "noise_logs": ["slow query logged: {rid}"]},
+    "rabbitmq": {"rps": 200, "latency_ms": 2, "err_rate": 0.0003, "gauges": {"memory_pct": 41}, "info_logs": ["connection accepted", "channel opened"]}
+  },
+  "edges": [
+    {"caller": "orchestrator", "callee": "llm-gateway", "weight": 0.7},
+    {"caller": "orchestrator", "callee": "portfolio-svc", "weight": 0.4},
+    {"caller": "orchestrator", "callee": "broker-gateway", "weight": 0.3},
+    {"caller": "orchestrator", "callee": "market-data", "weight": 0.2},
+    {"caller": "orchestrator", "callee": "auth-kyc", "weight": 0.1},
+    {"caller": "orchestrator", "callee": "redis-cache", "weight": 0.3},
+    {"caller": "portfolio-svc", "callee": "postgres", "weight": 0.8},
+    {"caller": "portfolio-svc", "callee": "redis-cache", "weight": 0.2},
+    {"caller": "aa-sync", "callee": "postgres", "weight": 0.7},
+    {"caller": "order-router", "callee": "broker-gateway", "weight": 0.8},
+    {"caller": "order-router", "callee": "postgres", "weight": 0.3},
+    {"caller": "portfolio-consumer", "callee": "aa-sync", "weight": 0.8, "lag_min": 1},
+    {"caller": "web-app", "callee": "portfolio-svc", "weight": 0.5},
+    {"caller": "web-app", "callee": "order-router", "weight": 0.5}
+  ],
+  "queues": [
+    {"name": "inbound-msgs", "publisher": "wa-webhook", "consumer": "orchestrator", "base_publish": 60, "base_consume": 70, "consumers": 4},
+    {"name": "outbound-msgs", "publisher": "orchestrator", "consumer": "msg-delivery", "base_publish": 55, "base_consume": 65, "consumers": 4},
+    {"name": "portfolio-updates", "publisher": "aa-sync", "consumer": "portfolio-consumer", "base_publish": 40, "base_consume": 50, "consumers": 3}
+  ],
+  "history": [
+    {"id": "INC-0388", "date": "2025-12-09", "summary": "Account aggregator data fetch failures for one bank", "root_cause": "Bank-side FIP downtime", "fix": "Retried with backoff after the provider recovered"},
+    {"id": "INC-0412", "date": "2026-01-18", "summary": "Late balance notifications", "root_cause": "Redis restart evicted hot context, cache stampede on portfolio-svc", "fix": "Restarted redis and pre-warmed hot keys"},
+    {"id": "INC-0431", "date": "2026-02-02", "summary": "Order placement errors after a release", "root_cause": "Validation regression in order-router release", "fix": "Rolled back the order-router revision"}
+  ]
+}

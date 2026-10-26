@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "msg-delivery",
+      "cause_type": "memory_leak",
+      "description": "msg-delivery leaks memory: heap grows steadily until containers are OOM-killed and restart, so outbound messages back up and deliveries are late or lost.",
+      "onset": "2026-05-06T08:15:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "WARN",
+          "contains": "heap usage",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-06T08:15:00Z",
+          "end": "2026-05-06T10:00:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "ERROR",
+          "contains": "container OOMKilled (memory limit 512Mi), restarting",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-06T09:10:00Z",
+          "end": "2026-05-06T10:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "the leak starts long before the symptoms (no sharp onset, no change); an orchestrator deploy lands just as users notice"
+}

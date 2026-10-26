@@ -1,0 +1,186 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "At about 15:10 UTC the redis-cache hit ratio fell from about 0.96 to 0.35. The same minute, the logs show 8000 hot keys expiring within one second, and this repeats about every 20-30 seconds through 15:20. Postgres pool_waiting rose from 0 to 35 at the same time, consistent with the cache misses falling through to postgres, which portfolio-svc calls with weight 0.8. This is the most likely cause of the slowness, but the evidence is partly indirect. portfolio-svc and web-app latency summaries over 14:30-15:30 show no clear rise (max 156 ms and 178 ms), which disagrees with the reported slowness, so I prefer the measurements and flag the gap. No deploy, config, migration or flag change falls near 15:10, so what is synchronizing the TTL expiry is unknown.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "A synchronized mass expiry of about 8000 hot keys in redis-cache, repeating every 20-30 s, collapsed the hit ratio. The resulting misses hit postgres, whose connection pool saturated (pool_waiting 35), slowing portfolio and balance reads (cache stampede).",
+   "component": "redis-cache",
+   "cause_type": "cache_ttl_expiry_stampede",
+   "score": 4.562,
+   "confidence": 0.695,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "redis-cache hit ratio was normal at 15:05 and collapsed at 15:10",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "hit ratio stayed at the floor afterwards",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "redis-cache logged a mass TTL expiry burst at onset",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "evicted_keys jumped from 0 to 8000 at 15:10",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "postgres pool_waiting rose from 0 at 15:05 to 24.5 at 15:10, then 35",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "portfolio-svc depends mostly on postgres and also uses redis-cache",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "redis memory was not under pressure, so the key loss came from TTL expiry rather than memory eviction",
+     "evidence_ids": [
+      "E-009"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "postgres connection-pool saturation is an independent or amplifying bottleneck, with the pool size or slow queries unable to absorb the extra miss load.",
+   "component": "postgres",
+   "cause_type": "connection_pool_exhaustion",
+   "score": 0.512,
+   "confidence": 0.204,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "postgres pool_waiting rose from 0 at 15:05 to 24.5 at 15:10, then 35",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "portfolio-svc depends mostly on postgres and also uses redis-cache",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "redis-cache hit ratio was normal at 15:05 and collapsed at 15:10",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "hit ratio stayed at the floor afterwards",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "redis-cache logged a mass TTL expiry burst at onset",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "evicted_keys jumped from 0 to 8000 at 15:10",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting rose from 0 at 15:05 to 24.5 at 15:10, then 35",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "portfolio-svc depends mostly on postgres and also uses redis-cache",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "redis memory was not under pressure, so the key loss came from TTL expiry rather than memory eviction",
+   "evidence_ids": [
+    "E-009"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "What triggered the simultaneous expiry of 8000 hot keys at about 15:10, and why it repeats every 20-30 s",
+  "Why portfolio-svc and web-app latency summaries show no clear rise even though users report slowness; the metrics may be too coarse or the impact may sit on specific endpoints",
+  "Whether postgres pool exhaustion is caused only by cache misses, because no postgres logs or query-level data were examined",
+  "The redis-cache WARN logs were truncated (52 matches, 30 shown), so burst frequency after 15:20 is unseen",
+  "query_metrics(portfolio-consumer): partial result"
+ ],
+ "actions": [
+  {
+   "text": "Stop the synchronized expiry. Find what sets or refreshes the TTL on the hot keys (cache-warming job, bulk write or flush) and apply jittered or longer TTLs. If a job is re-caching with identical TTLs, pause it.",
+   "rationale": "The expiry bursts repeat and keep the hit ratio at 0.35, so this is the likely source of the load shift to postgres.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Relieve postgres pool pressure: raise the pool limit or add request coalescing/rate limiting on portfolio-svc cache-miss reads until the hit ratio recovers.",
+   "rationale": "pool_waiting is pinned at 35 and portfolio-svc sends 80% of its calls to postgres.",
+   "evidence_ids": [
+    "E-005",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check user-facing latency with request-level or p95/p99 data for portfolio-svc and web-app, and look for per-endpoint slowness.",
+   "rationale": "The service-level latency summaries do not show the reported slowness, so the user impact is not yet measured directly.",
+   "evidence_ids": [
+    "E-007"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Find why the TTL expiry synchronized at 15:10. Review key-population jobs, app-level cache code, and any redis config or manual commands, since the change feed shows nothing near onset.",
+   "rationale": "The trigger is unidentified, and the feed has no change near 15:10.",
+   "evidence_ids": [
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 23,
+  "tool_attempts": 25,
+  "llm_calls": 6,
+  "tokens_in": 46205,
+  "tokens_out": 11306,
+  "rounds": 0,
+  "elapsed_s": 121.1
+ },
+ "dropped_claims": 0
+}

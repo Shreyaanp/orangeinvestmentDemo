@@ -1,0 +1,594 @@
+{
+ "status": "INCONCLUSIVE",
+ "status_reason": "top confidence 0.0 is below 0.4",
+ "summary": "The evidence does not establish a root cause for the order-placement failures. Three candidates remain: an upstream broker outage (H1), retry amplification driven by an unexplained order-router demand step at 14:00 (H2), and a broker-gateway capacity ceiling of about 40 rps (H3). H1 rests on broker 503 logs starting at 13:58 and on the fact that broker-gateway has no downstream calls. However, the err_rate and latency metrics only deviate at 14:02, the same minute as order-router, and the broker 503 logs stop at 14:01:45. H2 and H3 rest on order-router rps tripling at 14:00 (19 to 60), which neither retry logs nor web-app traffic explain, while broker-gateway rps stayed flat. The missing facts are the source of the extra order-router load, clock alignment between services, and any broker-side notice, so those checks should come first.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The upstream broker became unavailable or degraded and returned 503s through broker-gateway, which has no downstream calls, so order-router and orchestrator calls failed and orders failed from 14:02.",
+   "component": "broker-gateway",
+   "cause_type": "external_dependency_outage",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "broker-gateway logged its first upstream 503 at 13:58:11Z, about four minutes before order-router's first logged 503 at 14:02:28Z. 16 broker 503s were logged in total. This ordering is consistent with broker failures causing order-router failures but cannot be joined per request.",
+     "evidence_ids": [
+      "E-001",
+      "E-147",
+      "E-142"
+     ]
+    },
+    {
+     "text": "broker-gateway has no outbound calls, so failures there would surface as symptoms in its callers (order-router, orchestrator) rather than elsewhere. Orchestrator, whose own rps stayed flat, began logging broker 503s at 14:02:36 and its err_rate rose at 14:02.",
+     "evidence_ids": [
+      "E-040",
+      "E-133",
+      "E-129",
+      "E-128"
+     ]
+    },
+    {
+     "text": "The metrics show no broker-gateway rps surge, and no rate-limit signal (rate_limit_remaining stayed high). If the broker is the origin, this is consistent with a broker-side fault rather than load on broker-gateway, though that reading is inferred, not proven.",
+     "evidence_ids": [
+      "E-093",
+      "E-023",
+      "E-028"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "broker-gateway err_rate and latency first deviate at 14:02, the same minute as order-router and web-app, so the metrics do not show the broker leading.",
+     "evidence_ids": [
+      "E-052",
+      "E-089",
+      "E-054"
+     ]
+    },
+    {
+     "text": "The broker 503 logs stop at 14:01:45, yet err_rate climbs to about 0.3 from 14:02 onward with no WARN/ERROR lines to explain it. Logs and metrics disagree, and the 503 logs are not reflected in err_rate at 14:00-14:01 (about 0.005).",
+     "evidence_ids": [
+      "E-121",
+      "E-145",
+      "E-090"
+     ]
+    },
+    {
+     "text": "Searches of internal changes and past incidents for broker maintenance or upstream 503 found nothing. This is not proof of absence, since the broker's own sources were not checked.",
+     "evidence_ids": [
+      "E-099",
+      "E-100",
+      "E-148"
+     ]
+    },
+    {
+     "text": "The earliest metric change is order-router rps at 14:00, which this hypothesis does not explain. The cross-service ordering of 13:58 vs 14:02 is only meaningful if clocks are aligned, which was not verified.",
+     "evidence_ids": [
+      "E-058",
+      "E-127"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "An unexplained demand step at order-router at 14:00 (rps 19 to 60), with immediate no-backoff retries, overloaded the broker path and held order-router's error rate near 0.49 once broker-gateway began failing at 14:02.",
+   "component": "order-router",
+   "cause_type": "retry_amplification",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "order-router rps is the earliest metric to deviate, jumping from about 19 to 32.7 at 14:00 and reaching 59.7 by 14:02, before any error-rate or broker-side latency change.",
+     "evidence_ids": [
+      "E-058",
+      "E-106"
+     ]
+    },
+    {
+     "text": "order-router logged immediate no-backoff retries from 14:00:02Z, before its own error rate rose. These retries could add load once the broker path starts failing.",
+     "evidence_ids": [
+      "E-080",
+      "E-109"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Retry log lines are flat at 6 per minute while rps rises from 32.7 to 59.7, and 6 lines/min is about 0.1 rps against a rise of about 40 rps. Retries do not account for the demand step. The retries have no logged trigger, and the 'attempt 5' counter is constant on every line, which may be a logging artifact.",
+     "evidence_ids": [
+      "E-086",
+      "E-114",
+      "E-116",
+      "E-081"
+     ]
+    },
+    {
+     "text": "broker-gateway rps stayed flat, so the metrics show no retry-driven amplification on the broker.",
+     "evidence_ids": [
+      "E-093",
+      "E-096"
+     ]
+    },
+    {
+     "text": "web-app rps is flat, so the demand step is not visible at the edge. Its source is unexplained, and it could be order-specific traffic hidden in an aggregate metric or another caller.",
+     "evidence_ids": [
+      "E-102",
+      "E-115"
+     ]
+    },
+    {
+     "text": "Broker 503s began at 13:58, before the order-router rps step, which this hypothesis does not account for.",
+     "evidence_ids": [
+      "E-133",
+      "E-001"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "broker-gateway has a fixed capacity ceiling of about 40 rps (a worker or connection limit). The order-router demand step pushed it past that ceiling, so latency doubled and errors rose from 14:02 while its observed rps stayed flat.",
+   "component": "broker-gateway",
+   "cause_type": "resource_saturation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "broker-gateway latency roughly doubled at 14:00-14:02 (about 225 ms to 396 ms, then to about 880 ms by 14:05) and its err_rate rose in the same minute, coinciding with the order-router demand step. This is consistent with a saturation or capacity limit.",
+     "evidence_ids": [
+      "E-054",
+      "E-091",
+      "E-093"
+     ]
+    },
+    {
+     "text": "If order-router calls fail before reaching the broker, the flat broker rps would be consistent with a fixed ceiling. This is an unverified assumption.",
+     "evidence_ids": [
+      "E-061"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "No pool, thread, CPU or memory metric exists for broker-gateway, so a capacity limit cannot be tested directly. The 40 rps ceiling is inferred from flat rps only.",
+     "evidence_ids": [
+      "E-074"
+     ]
+    },
+    {
+     "text": "broker-gateway rps was already about 40 before the failures, so no change in broker load is visible. The 503 logs from 13:58 also point to an upstream fault rather than local exhaustion.",
+     "evidence_ids": [
+      "E-093",
+      "E-001"
+     ]
+    },
+    {
+     "text": "Latency is a step at 14:00-14:02 rather than a gradual ramp, and the earlier slow-response warnings did not grow in rate. This neither supports nor rules out saturation.",
+     "evidence_ids": [
+      "E-068",
+      "E-079",
+      "E-067"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway first logs a 503 upstream error at 13:58:11Z, about four minutes before order-router's error-rate rise. 8 broker 503 errors fall between 13:58 and 14:00, and 16 in total across the 13:30-14:30 window.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining stayed high (min 855.87, mean 900.54), and no 429 or rate-limit lines appear in the WARN/ERROR logs I pulled, which weakens a broker rate-limit explanation.",
+   "evidence_ids": [
+    "E-023"
+   ]
+  },
+  {
+   "text": "broker-gateway lists no outbound calls and no queue publish or consume links.",
+   "evidence_ids": [
+    "E-040"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate first deviates from baseline at 14:02 (0.005 at 14:01, 0.08 at 14:02), not at 14:00 as E-018 states; the 14:00 value is 0.005.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "broker-gateway latency_ms first deviates at 14:02: flat at about 210-231 ms through 14:01, then 396.445 at 14:02 and rising to 737.591 by 14:04.",
+   "evidence_ids": [
+    "E-054"
+   ]
+  },
+  {
+   "text": "order-router rps is the earliest metric to deviate: it jumps from about 19-20 rps to 32.714 at 14:00, then 46.017 at 14:01 and 59.716 at 14:02, before any err_rate or broker-side latency change.",
+   "evidence_ids": [
+    "E-058"
+   ]
+  },
+  {
+   "text": "broker-gateway mean latency is flat at baseline before onset (13:30 bucket).",
+   "evidence_ids": [
+    "E-068"
+   ]
+  },
+  {
+   "text": "The broker-gateway metric summary returned only four metrics (err_rate, latency_ms, rate_limit_remaining, rps). No pool, thread, CPU or memory metric was returned.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "First retry in the window: order-router retries place_order immediately without backoff at 14:00:02Z, the earliest retry line from the oldest-first query.",
+   "evidence_ids": [
+    "E-080"
+   ]
+  },
+  {
+   "text": "All 18 retry lines in 13:55-14:03 report the same 'attempt 5' counter, and the result was not truncated or partial. The constant counter is unexplained and could be a logging artifact.",
+   "evidence_ids": [
+    "E-081"
+   ]
+  },
+  {
+   "text": "Retry lines per minute are flat at 6 for 14:00, 14:01 and 14:02 (my count of the T8-01 lines: 6, 6, 6), while rps rises from 32.7 to 59.7 over the same minutes.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate is at baseline through 14:01 and first rises in the 14:02 bucket (0.08), the same minute order-router first deviates (E-004). This does not show broker-gateway leading order-router, and it contradicts the 14:00 onset in E-018.",
+   "evidence_ids": [
+    "E-089"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate keeps climbing after onset, reaching about 0.305 by 14:05 and holding near 0.30 through 14:09.",
+   "evidence_ids": [
+    "E-090"
+   ]
+  },
+  {
+   "text": "broker-gateway latency_ms is flat at about 212 to 231 ms from 13:50 to 14:01, then rises from 396 ms at 14:02 to 881 ms at 14:05 and 909 ms at 14:08. The latency rise starts in the same minute as the err_rate rise.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  },
+  {
+   "text": "broker-gateway rps stayed flat from 13:50 to 14:09 (range 37.8 to 43.3), with no rise at or after 14:00 and no surge in broker request volume.",
+   "evidence_ids": [
+    "E-093"
+   ]
+  },
+  {
+   "text": "A search for broker maintenance, status-page incidents and API changes returned no matching past incidents.",
+   "evidence_ids": [
+    "E-099"
+   ]
+  },
+  {
+   "text": "A second search for broker upstream 503, maintenance window and deprecation notices also returned no matching past incidents.",
+   "evidence_ids": [
+    "E-100"
+   ]
+  },
+  {
+   "text": "web-app aggregate rps is flat across the window; no rise at or after 14:00.",
+   "evidence_ids": [
+    "E-102"
+   ]
+  },
+  {
+   "text": "order-router rps steps up at 14:00, before any web-app error and before the first logged order-router 503.",
+   "evidence_ids": [
+    "E-106"
+   ]
+  },
+  {
+   "text": "The first place_order-matching log line is a retry at 14:00:02Z, with no preceding trigger line in the window. Every retry line in the window carries the same 'attempt 5' counter.",
+   "evidence_ids": [
+    "E-109"
+   ]
+  },
+  {
+   "text": "The last broker-gateway 503 ERROR in the 13:55-14:10 WARN/ERROR pull is at 14:01:45, and no broker-gateway WARN or ERROR appears from 14:02 through 14:10 in that result.",
+   "evidence_ids": [
+    "E-121"
+   ]
+  },
+  {
+   "text": "orchestrator rps was flat through the onset window; the 14:00 value is in line with the rest of the window, so its own request volume did not rise when order-router's did.",
+   "evidence_ids": [
+    "E-128"
+   ]
+  },
+  {
+   "text": "orchestrator err_rate first deviates from its ~0.004 baseline at 14:02, the same minute as the order-router and broker-gateway deviations.",
+   "evidence_ids": [
+    "E-129"
+   ]
+  },
+  {
+   "text": "orchestrator's first logged broker-gateway call failure is an HTTP 503 at 14:02:36Z. No orchestrator broker 503 appears between 13:55 and 14:02:36.",
+   "evidence_ids": [
+    "E-133"
+   ]
+  },
+  {
+   "text": "order-router logged 8 ERROR 'broker-gateway call failed: HTTP 503' lines, exactly one per minute from 14:02 to 14:09, with no truncation.",
+   "evidence_ids": [
+    "E-142"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The 503s most likely reflect broker-side unavailability, not broker-gateway resource exhaustion, but that is inferred from the upstream wording and the flat rps/rate-limit metrics, not proven.",
+   "evidence_ids": [
+    "E-028"
+   ]
+  },
+  {
+   "text": "broker-gateway rps stays flat (about 40) while order-router rps roughly triples, which is inconsistent with order-router making synchronous calls to broker-gateway. This may be a metric-scope difference or failed calls that never reach the broker, but it is unverified.",
+   "evidence_ids": [
+    "E-061"
+   ]
+  },
+  {
+   "text": "Per-bucket counts derived from the 14 timestamps (5-minute buckets, start-of-bucket convention): 13:00:1, 13:10:2, 13:20:1, 13:25:1, 13:30:1, 13:35:2, 13:55:1, 14:10:1, 14:20:2, 14:25:2; all other buckets 0. About 0.16 lines/min before 13:58 and about 0.17 lines/min from 14:00-14:30, so the count does not visibly grow.",
+   "evidence_ids": [
+    "E-067"
+   ]
+  },
+  {
+   "text": "broker-gateway latency rises as a step at 14:00 rather than a gradual ramp from 13:33. This weakens a gradual-degradation reading based on the slow-response lines, because the 13:30 and 13:35 bucket means show no shift when the 13:33:34Z slow line occurred.",
+   "evidence_ids": [
+    "E-079"
+   ]
+  },
+  {
+   "text": "Because broker-gateway rps did not rise while err_rate and latency rose, the metrics do not show retry-driven load amplification on the broker (weakens E-017), at least for broker-gateway-observed requests.",
+   "evidence_ids": [
+    "E-096"
+   ]
+  },
+  {
+   "text": "Retries do not account for the order-router rps tripling: 6 lines/min is about 0.1 rps, against a rise of about 40 rps (19 to about 60). Either retry lines are sampled or incomplete, or the extra load comes from elsewhere.",
+   "evidence_ids": [
+    "E-114"
+   ]
+  },
+  {
+   "text": "Because web-app aggregate rps is flat, the added order-router demand is either an order-specific shift inside web-app traffic (not visible in an aggregate metric), or comes from another order-router caller not examined here, or from unlogged retries.",
+   "evidence_ids": [
+    "E-115"
+   ]
+  },
+  {
+   "text": "The retry trigger at 14:00:02Z has no logged cause and precedes any logged failure, so retries are not shown to be the initiator. An unlogged trigger is still possible.",
+   "evidence_ids": [
+    "E-116"
+   ]
+  },
+  {
+   "text": "Broker 503s start at 13:58:11 and order-router's first 503 is at 14:02:28, about four minutes apart. This order is only meaningful if the host clocks are aligned, which has not been verified, so it does not establish broker-side origin by itself.",
+   "evidence_ids": [
+    "E-127"
+   ]
+  },
+  {
+   "text": "The broker-gateway 503 lines (about 4 per minute at 13:58-14:01) would be roughly 10% of traffic at the broker's ~40 rps. Established claims E-018/E-052/E-089 put broker err_rate at about 0.005 in the 14:00 and 14:01 buckets, so the err_rate metric does not reflect these logged 503s. Either err_rate excludes them or the log lines are not all counted as requests. This is not verified.",
+   "evidence_ids": [
+    "E-145"
+   ]
+  },
+  {
+   "text": "The broker-gateway 503 onset (13:58) precedes the order-router 503 onset (14:02:28) by about 4 minutes, with the last broker 503 about 41 seconds before the first order-router 503. This is consistent with broker 503s causing order-router failures but does not prove it, since the lines cannot be joined by request id.",
+   "evidence_ids": [
+    "E-147"
+   ]
+  },
+  {
+   "text": "A broker-side maintenance window, status-page incident or API change around 13:55-14:05 UTC remains neither confirmed nor excluded. Internal change and incident searches came back empty, but the broker's own sources were not checked.",
+   "evidence_ids": [
+    "E-148"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The cause of the failures is not established. H1, H2 and H3 remain open, and H1 is compatible with H2, and H2 with H3.",
+  "The source of the order-router rps increase at 14:00 is unexplained: retry logs, web-app rps and broker-gateway rps do not account for it. Where those calls go is unknown.",
+  "Whether a broker-side maintenance window, status incident or API change occurred around 13:55-14:05 is neither confirmed nor excluded. The broker's own sources were not checked.",
+  "Clock skew between services was not checked, so the 13:58 broker 503 vs 14:02 order-router ordering is unverified. Metrics have one-minute resolution only.",
+  "Broker-gateway logs show no WARN/ERROR after 14:01:45 while its err_rate rose to about 0.3. The logs and metrics are unreconciled.",
+  "Order-router logs only about 1 '503' line per minute (2 in 13:57-14:04) against an err_rate of 0.12 to 0.49. Other error types were not queried, and the log truncated at 100 of 355 matches, with lines after 14:09:02Z unread.",
+  "The timeout lines claimed for order-router (E-008) conflict with the empty timeout search (E-083).",
+  "Summary statistics differ between queries, probably because of differing window coverage. The err_rate onset minute in E-018 (14:00) is contradicted by the per-minute series (14:02). The broker 503 count in E-001 (8) does not match the returned lines (12 for 13:58-14:00).",
+  "No latency percentiles, pool, thread, CPU or memory metrics were available, and the share of customers affected was not measured.",
+  "The deploy and change feed was queried with service=null only. It does not cover scheduled jobs, credential rotation, infrastructure scaling or external changes, and the window before 12:00 or after 14:05 was not checked.",
+  "Dependencies of portfolio-consumer, aa-sync and portfolio-svc, and any competing broker-gateway traffic from them, were not checked. The rabbitmq lookup returned nothing, and queue depth metrics were not retrieved.",
+  "The past incident INC-0431 (order-router validation regression, rolled back) is a hint only. No order-router change was found, so applicability is unverified.",
+  "The copy-only deploys (msg-delivery, llm-gateway) are probably unrelated, but their diffs were not checked.",
+  "unresolved critic challenge C7: Order-router rps tripled from 14:00 while broker-gateway rps stayed flat at about 40, web-app rps was flat, and retry lines (about 6 per minute) are far too few to explain the rise. The source of the extra order-router load, and where those calls go, is unexplained. That is the one fact that separates H2 and H3 (demand-driven overload) from H1 (broker outage).",
+  "No per-minute points for broker-gateway (err_rate, latency_ms, rps), so the broker-side onset minute and whether its request volume rose before failures could not be confirmed.",
+  "No p50/p95/p99 latency percentiles were retrieved for any service.",
+  "No per-minute order-router rps series, so it is unknown whether retries raised request volume to the broker.",
+  "order-router WARN/ERROR log query was truncated (355 matches, 100 returned); lines after 14:09:02Z were not read.",
+  "Broker-gateway logs were queried only for 13:30-14:30; nothing was checked after 14:30 or before 13:30.",
+  "Share of customers or requests affected was not measured, so that part of the task is unanswered.",
+  "orchestrator and wa-webhook were not queried, so the task's comparison of which service degrades first is incomplete.",
+  "Clock skew between services was not checked. The ordering of broker-gateway and order-router logs relies on their timestamps being aligned.",
+  "No rabbitmq queue depth, consumer count, unacked or dead-letter metrics were returned, so backlog on inbound-msgs, outbound-msgs and portfolio-updates is unverified.",
+  "broker-gateway pool, thread, CPU and memory metrics were not present in the summary; only err_rate, latency_ms, rate_limit_remaining and rps were returned.",
+  "broker-gateway metric points were only fetched for err_rate; latency_ms, rps and rate_limit_remaining have no time series, so exact onset timing for those is unknown.",
+  "Not queried: portfolio-consumer, aa-sync, portfolio-svc, redis-cache, order-router. Competing traffic and redis hit rate are therefore unverified.",
+  "Logs were limited to WARN and above from 13:30 to 14:30 and capped at 100 lines (25 returned). No evidence about retry storms or duplicate order submissions was obtained.",
+  "The 13:58 log timing precedes the 14:00 metric bucket; clock skew or bucket alignment could explain this, and I could not check it.",
+  "get_changes only covers deploy, config, migration and flag kinds; scheduled jobs/cron batch syncs, secret/credential rotations, scaling/infrastructure changes and external broker announcements (maintenance, API version, rate limits) were not checked and need other sources.",
+  "The window 12:00-13:00 is outside the stated data coverage (13:00-15:00), so changes there may be missing.",
+  "The empty result for 2026-04-02 to 2026-04-03 12:00 may reflect a feed gap rather than no changes; it was not cross-checked per service.",
+  "Changes were queried with service=null only; per-service checks on order-router, broker-gateway, orchestrator, market-data, auth-kyc, aa-sync, portfolio-consumer, redis-cache, postgres and rabbitmq were not run, and the call budget (4) was exhausted.",
+  "Cache TTL expiry and scheduled flags set hours earlier could take effect after 12:00 and are not visible in this feed.",
+  "search_incidents returned only one past incident (INC-0431), which is a hypothesis to test, not evidence about the current event.",
+  "get_dependencies(rabbitmq) returned no items. Queue producers and consumers for portfolio-updates, inbound-msgs and outbound-msgs were not confirmed beyond orchestrator's links, and the lookup may need queue names rather than the rabbitmq service name.",
+  "No timeout, retry or circuit-breaker settings were returned for any edge; the tool does not expose them.",
+  "Dependency lookups were not run for portfolio-consumer, aa-sync, portfolio-svc, auth-kyc, market-data, llm-gateway, redis-cache or postgres, so their links to broker-gateway, redis-cache and postgres are unverified. This is due to the about-4-call budget.",
+  "Only the topology was checked here; no change records were retrieved, so recent deploys or config changes affecting these edges are unknown.",
+  "Searches for broker-gateway overload, rate limiting, retry storms, timeouts, portfolio-updates backlog, portfolio-consumer, and connection pool exhaustion returned no matching past incidents (T5-02 was empty). Only two loosely related incidents were found.",
+  "Past incident records have source and url set to null and carry no time-of-day, so I could not check whether they began near 14:00 UTC, market open, or a batch job.",
+  "get_dependencies(broker-gateway) listed only callers. It showed no outgoing calls and no queue publish/consume edges, so I could not map the broker-gateway downstream blast radius or the portfolio-updates link.",
+  "No change or config data was gathered, so I cannot say whether any order-router release or config change happened near onset.",
+  "The requested check for whether broker-gateway 503 lines carry upstream host, response body or request-id fields that order-router logs also record was not run. The call budget was used by the five metric queries, and no query_logs call was made in this turn.",
+  "No per-minute log correlation was done between broker 503 timestamps and metric minutes, so clock-alignment concerns are not resolved.",
+  "E-018 (broker err_rate deviating at 14:00) and E-017 (no order-router rps rise) are contradicted by the per-minute series and should be retracted or revised.",
+  "Summary stats in E-011, E-013, E-014, E-019 and E-022 differ from the tool results (for example, latency max 927.173 vs 952.074; err_rate mean 0.138 vs 0.146); the discrepancy source is unknown.",
+  "Per-minute broker-gateway rate_limit_remaining and 429 counts were not pulled, so the rate-limit explanation is only partly tested by earlier summaries.",
+  "Pool, thread, CPU and memory metrics for broker-gateway are not in the metric summary (only err_rate, latency_ms, rate_limit_remaining and rps), so they could not be checked. They may be exported under other names or not at all.",
+  "Latency percentiles (p50/p95/p99) are not returned by query_metrics. Only min, max, mean, last and per-bucket values of unspecified aggregation are available.",
+  "The slow-response query was filtered to WARN and the contains string 'responded slowly'. Sampling of these logs is unknown, and requests that timed out without this line would not appear.",
+  "The bucket mean latency may hide a few slow requests, so the 13:33:34Z line is not contradicted by a flat 13:30 mean.",
+  "The window summaries for broker-gateway and order-router cover 13:00-14:30, while the data covers 13:00-15:00. This explains part of the difference from E-013 and E-014, but was not confirmed.",
+  "Bucket counts assume the bucket timestamp marks the start of the 5-minute bucket.",
+  "Clock skew between services was not assessed.",
+  "Retry lines do not record their trigger, so the failure that started them is unknown from this query.",
+  "The timeout search returned zero lines, which conflicts with E-008. Either the timeout wording differs from 'timeout' or logging was incomplete. Not resolved here.",
+  "No per-minute broker-gateway 503 count was pulled in this call, so the 13:58:11 broker 503 onset is not re-verified against order-router timing.",
+  "The 'retry budget exhausted' line (E-009) was not in this query, so its timing is not checked here.",
+  "The rps series covers only 13:55-14:03 and this window's max is 59.716, not the 63.9 cited in the hint. The full-window peak is not checked here.",
+  "Order-router error-rate per minute was not pulled, so the link between rps, retries and error-rate rise is not measured here.",
+  "Order-router per-minute err_rate, latency_ms and rps were not pulled in this task, so the 14:02 tie with broker-gateway is not checked against order-router's own bucket values beyond E-004.",
+  "Metrics are at one-minute resolution, so sub-minute precedence between the 13:58:11Z broker 503 log and the 14:02 metric deviation cannot be determined.",
+  "Broker-gateway logs were not re-queried in this task, so the 13:58 503 lines (E-001, E-020) rest on earlier results. They are not reflected in the err_rate series, which is a logs-vs-metrics disagreement I could not resolve.",
+  "rps is shown as flat at broker-gateway, but I did not verify retry traffic at the order-router edge per minute, so the retry-amplification question stays open.",
+  "E-018 (14:00 deviation from baseline, sitting at 0.305 from 14:05) is inconsistent with the 14:00 value of 0.005 in this series and should be corrected by the critic or reasoning agent.",
+  "No tool covers external broker status pages, maintenance calendars or API changelogs, so a broker-side notice or API change cannot be confirmed or excluded from this data.",
+  "get_changes records only internal deploy, config, migration and flag events, so an external broker change would never appear in it.",
+  "search_incidents covers only internal past incidents and returned nothing relevant, so an empty result is not evidence that no broker notice exists.",
+  "Broker-side per-minute error and request-volume series were not pulled in this task, so the onset of broker errors (13:58 503s) cannot be matched to a specific broker event.",
+  "Distinct order IDs versus attempts cannot be computed: none of the retry or web-app lines carry an order ID.",
+  "No non-retry place_order request-receipt lines matched the search, so per-minute place_order request counts (the core measure of demand) are unavailable from these logs.",
+  "web-app rps and err_rate are aggregate per-service metrics, not order-specific, so the share of web-app traffic that is order placement is unknown.",
+  "Other order-router callers were not queried. The topology cited earlier (E-038) lists web-app only, and no other caller's rps was pulled.",
+  "Retry lines cannot be reconciled with the order-router rps rise (about 6 lines/min against about 40 extra rps), so either retry logging is incomplete or the metric counts traffic not logged.",
+  "The 'attempt 5' counter is constant on all 60 lines and is unexplained; it may be a logging artifact.",
+  "Sub-minute ordering between web-app, order-router and broker-gateway is unknown, and clock skew has not been ruled out.",
+  "The timeout search covered only web-app. order-router's own timeout lines were not re-queried here (E-083 reports zero at WARN and above, which conflicts with E-008).",
+  "The 503 lines have no request ID, upstream host or response body, so broker and order-router failures cannot be joined per request. The requested field check is negative.",
+  "Broker-gateway logs no WARN or ERROR after 14:01:45 through 14:10, but earlier established metrics show err_rate rising from 14:02 to about 0.3. Those metric values were not re-pulled in this task, so the logs and metrics disagree and the cause of the silence is unknown (logging gap, sampling, or metric scope).",
+  "Order-router logs only 2 HTTP 503 lines in this window, so its failure volume is not explained by logged 503s. Its other error types (timeouts, retry-exhaustion) were not queried here.",
+  "Clock alignment between broker-gateway and order-router was not checked, so sub-minute ordering across the two services is unverified.",
+  "The 'responded slowly' WARN lines before 13:58 were only checked for 13:55-14:10 in this pull; the wider series was not re-verified here.",
+  "No orchestrator latency or err_rate baseline earlier than 13:55, so it is unclear whether the ~870 ms level before 14:00 is abnormal.",
+  "orchestrator err_rate covers all of its calls, not only broker calls, so the broker share of its error rate cannot be separated out.",
+  "The WARN-level 'broker-gateway' search returned only ERROR lines. No orchestrator WARN about slow broker responses appears, but that is absence in logs, not evidence of health.",
+  "No orchestrator metric summary or pool/concurrency metric was pulled, so orchestrator-side saturation is not tested.",
+  "Results cover only 13:55-14:10, so the 14:10-14:30 recovery or continuation is not checked here.",
+  "Broker-gateway concurrency, queue or worker metrics were not queried in this task.",
+  "No request id, trace id or upstream host field is present in either log set returned, so per-request matching between broker-gateway 503s and order-router failed calls was not possible. A query on a trace or request-id field, or the raw structured log fields, is needed.",
+  "The order-router query filtered on contains '503' at WARN and above, so it does not capture timeouts or other error types. Its 8 lines therefore cannot be compared with its err_rate of about 0.12 to 0.49 in the same window.",
+  "The broker-gateway err_rate per-minute values were not pulled in this task. The comparison against the 4 per minute 503 lines relies on established claims (E-018, E-052, E-089) that I did not verify.",
+  "E-001's count ('8 between 13:58 and 14:00') does not match the returned lines, which give 12 for 13:58-14:00 inclusive. The 8 figure matches 13:58-13:59 only.",
+  "No broker-gateway or order-router logs outside the 13:55-14:10 window were queried for this task, so the claim that 16 is the full 13:30-14:30 total is only supported by E-002, not re-checked here.",
+  "The broker's status page, maintenance calendar and API changelog are outside the reach of get_changes, get_dependencies and search_incidents, so T15 cannot be verified here. Someone with access to the broker's external sources needs to check 13:55-14:05 UTC.",
+  "No new tool calls were made; the internal absence-of-change and absence-of-past-incident results come from E-097, E-099 and E-100 as already recorded by the team.",
+  "Broker-gateway has no listed upstream vendor or external dependency in the topology (E-040), so the graph does not point to a status feed I could query."
+ ],
+ "actions": [
+  {
+   "text": "Check the broker's status page, maintenance calendar and API changelog for 13:55-14:05 UTC, and contact the broker if one exists.",
+   "rationale": "Internal change and incident searches cannot see external broker events, and this is the main open check for H1.",
+   "evidence_ids": [
+    "E-148",
+    "E-099",
+    "E-100"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Identify the source of the extra order-router traffic that began at 14:00 (about 19 to 60 rps). Query order-router callers other than web-app, order-specific web-app request counts, and unlogged retries.",
+   "rationale": "This is the one fact that separates the demand-driven hypotheses (H2, H3) from the outage hypothesis (H1), and neither web-app rps nor retry lines explain it.",
+   "evidence_ids": [
+    "E-058",
+    "E-114",
+    "E-115",
+    "E-102"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Pull broker-gateway concurrency, worker, connection pool, CPU and memory metrics (possibly under other names) and per-minute rate_limit_remaining and 429 counts.",
+   "rationale": "The summaries returned only four metrics, so a capacity ceiling (H3) cannot be tested.",
+   "evidence_ids": [
+    "E-074",
+    "E-075",
+    "E-010"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Verify clock alignment between broker-gateway, order-router, web-app and orchestrator hosts, and re-query logs by raw structured fields (trace or request id) to join broker 503s to order-router failures.",
+   "rationale": "The 13:58 vs 14:02 ordering and the broker-origin reading depend on aligned clocks, and the 503 lines carry no request id.",
+   "evidence_ids": [
+    "E-127",
+    "E-143",
+    "E-144",
+    "E-126"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Investigate why broker-gateway err_rate stays near 0.3 after the 503 logs stop at 14:01:45, and why the logged 503s are not reflected in err_rate at 14:00-14:01. Reconcile the metric and log definitions and the differing summary statistics.",
+   "rationale": "The logs and metrics disagree, and several summary values differ between queries, so the data cannot be trusted until reconciled.",
+   "evidence_ids": [
+    "E-121",
+    "E-145",
+    "E-053",
+    "E-055"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Review order-router retry behavior (no backoff, constant 'attempt 5' counter) and add backoff with jitter and a retry budget.",
+   "rationale": "The logs show immediate no-backoff retries, which are a risk during any broker degradation even though they are not shown to be the cause here.",
+   "evidence_ids": [
+    "E-080",
+    "E-081",
+    "E-109"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add request or trace ids to the broker-gateway and order-router 503 log lines, and add broker-gateway pool and concurrency metrics and latency percentiles.",
+   "rationale": "Both log sets lack join keys, and no pool metrics or percentiles were available, which blocked this investigation.",
+   "evidence_ids": [
+    "E-143",
+    "E-144",
+    "E-074",
+    "E-076"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 58,
+  "tool_attempts": 58,
+  "llm_calls": 47,
+  "tokens_in": 481284,
+  "tokens_out": 105697,
+  "rounds": 3,
+  "elapsed_s": 473.5
+ },
+ "dropped_claims": 0
+}

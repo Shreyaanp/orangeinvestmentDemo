@@ -1,0 +1,195 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement is failing because broker-gateway is getting 503s from the upstream broker. The first such error is at 13:58:11Z, and broker-gateway err_rate went from 0.005 to 0.305 by 14:05. order-router, which calls broker-gateway with weight 0.8, shows err_rate 0.489 and its rps tripled from about 20 to about 61 from 14:00. Its logs show \"retrying place_order immediately (attempt 5) without backoff\", so a retry storm is probably amplifying the failure. broker-gateway's own rps stayed flat at 37-44 and its rate limit headroom was healthy, so it is not overloaded by volume as the report suggested. No relevant deploy, config or flag change is near onset. I cannot tell from this data whether the upstream broker outage or the retry behaviour started first.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The upstream broker is returning 503s through broker-gateway starting about 13:58, which is the primary origin of the order failures. order-router errors are consequences.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_dependency_unavailable",
+   "score": 3.0,
+   "confidence": 0.6,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "broker-gateway began logging upstream broker 503s at 13:58, before the reported 14:00 onset",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "broker-gateway err_rate stepped from baseline 0.005 to 0.095 at 14:00, then 0.305",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "order-router is the main caller of broker-gateway, so its failures are downstream effects",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "order-router err_rate is about 0.489 and sustained, higher than broker-gateway's",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "broker-gateway ERROR logs are empty after 14:01:45 although err_rate stays about 0.305, so logs and metrics disagree",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "order-router retries place_order immediately with no backoff, tripling its request rate and amplifying the failure while the broker is unhealthy.",
+   "component": "order-router",
+   "cause_type": "retry_storm_no_backoff",
+   "score": 1.05,
+   "confidence": 0.344,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "order-router traffic jumped from about 20 rps to 51 rps at 14:00",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router retries place_order immediately with no backoff",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "order-router err_rate is about 0.489 and sustained, higher than broker-gateway's",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "broker-gateway rps stayed flat over the window, which does not support volume overload of broker-gateway",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway began logging upstream broker 503s at 13:58, before the reported 14:00 onset",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate stepped from baseline 0.005 to 0.095 at 14:00, then 0.305",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "order-router traffic jumped from about 20 rps to 51 rps at 14:00",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router retries place_order immediately with no backoff",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "broker-gateway rps stayed flat over the window, which does not support volume overload of broker-gateway",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "order-router err_rate is about 0.489 and sustained, higher than broker-gateway's",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "order-router is the main caller of broker-gateway, so its failures are downstream effects",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "broker-gateway ERROR logs are empty after 14:01:45 although err_rate stays about 0.305, so logs and metrics disagree",
+   "evidence_ids": [
+    "E-008"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Whether the upstream broker outage or order-router's retry behaviour started first. The retry warnings may have begun before or after the 13:58 broker 503s, and the order-router WARN query was truncated at 293 matches.",
+  "The order-router rps tripled but broker-gateway rps stayed flat, so it is unclear where the extra retry traffic goes or whether it is absorbed before reaching broker-gateway.",
+  "Why broker-gateway ERROR logs stop at 14:01:45 while err_rate stays at about 0.305.",
+  "The current state and cause of the upstream broker's 503s, which are outside the data available here."
+ ],
+ "actions": [
+  {
+   "text": "Contact the upstream broker or check its status page about the 503s that began around 13:58Z, and confirm whether they are still occurring.",
+   "rationale": "The earliest deviation is upstream broker 503s in broker-gateway, which are the likely origin of the order failures.",
+   "evidence_ids": [
+    "E-001",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Throttle or disable order-router's immediate retries of place_order, or add a circuit breaker or exponential backoff with jitter.",
+   "rationale": "Retries without backoff coincide with order-router rps tripling and err_rate near 0.49, which likely worsens the load on the broker path.",
+   "evidence_ids": [
+    "E-003",
+    "E-004",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check the broker-gateway log pipeline or sampling, since ERROR logs stop at 14:01:45 while err_rate stays at 0.305.",
+   "rationale": "Logs and metrics disagree, and I prefer the metrics, but the log gap needs explaining.",
+   "evidence_ids": [
+    "E-008",
+    "E-002"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add retry budgets and backoff standards for order-router and alerting on broker 503 rate. Review whether the 'broker-gateway overloaded' framing applies.",
+   "rationale": "broker-gateway rps was flat and there is no recent relevant change, so the cause is not load on broker-gateway or a deploy.",
+   "evidence_ids": [
+    "E-005",
+    "E-009"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 23,
+  "tool_attempts": 23,
+  "llm_calls": 7,
+  "tokens_in": 45120,
+  "tokens_out": 10283,
+  "rounds": 0,
+  "elapsed_s": 133.0
+ },
+ "dropped_claims": 0
+}

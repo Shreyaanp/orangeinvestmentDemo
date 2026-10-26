@@ -1,0 +1,50 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "worker",
+      "cause_type": "bad_prompt_release",
+      "description": "Prompt v13 tells the model to estimate when a tool result is missing; when the portfolio tool fails (a pre-existing ~8% intermittent RDS connection error) the model now invents a portfolio value instead of apologising.",
+      "onset": "2026-10-21T09:36:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "worker",
+          "level": null,
+          "contains": "387c386",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-21T09:36:00Z",
+          "end": "2026-10-21T10:30:00Z"
+        },
+        {
+          "kind": "code",
+          "service": "worker",
+          "level": null,
+          "contains": "prompts/answer.txt",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-21T09:36:00Z",
+          "end": "2026-10-21T10:30:00Z"
+        },
+        {
+          "kind": "conversation",
+          "service": "worker",
+          "level": null,
+          "contains": "Your portfolio is worth",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": true,
+          "start": "2026-10-21T09:36:00Z",
+          "end": "2026-10-21T10:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "Error rates and latency are unchanged, and the RDS errors were there all day (not new). Only the conversation records show answers given after a failed tool call; the cause is the prompt release, not the database."
+}

@@ -1,0 +1,77 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "orchestrator",
+      "cause_type": "runaway_agent_loop",
+      "description": "A runaway agent loop in the orchestrator repeated tool calls (for example 38 identical get_holdings calls in one session), spiking llm-gateway token use and latency.",
+      "onset": "2026-03-27T10:55:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "orchestrator",
+          "level": "ERROR",
+          "contains": "agent loop detected: repeated tool call get_holdings x38 in one session, aborting",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-27T10:55:00Z",
+          "end": "2026-03-27T12:00:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "llm-gateway",
+          "level": null,
+          "contains": "",
+          "metric": "tokens_per_min",
+          "min_value": 320000.0,
+          "start": "2026-03-27T10:55:00Z",
+          "end": "2026-03-27T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "role": "secondary",
+      "component": "msg-delivery",
+      "cause_type": "notification_template_bug",
+      "description": "A msg-delivery release (notification template refactor) fails to render notifications (missing variable portfolio_value), producing blank notifications.",
+      "onset": "2026-03-27T11:25:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "ERROR",
+          "contains": "template render failed: missing variable 'portfolio_value'",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-27T11:25:00Z",
+          "end": "2026-03-27T12:00:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "msg-delivery",
+          "level": "WARN",
+          "contains": "notification sent with empty body after template render failure",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-27T11:26:00Z",
+          "end": "2026-03-27T12:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "msg-delivery",
+          "level": null,
+          "contains": "msg-delivery-00290",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-27T11:24:00Z",
+          "end": "2026-03-27T12:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "two unrelated concurrent faults; both must be found, the primary ranked first"
+}

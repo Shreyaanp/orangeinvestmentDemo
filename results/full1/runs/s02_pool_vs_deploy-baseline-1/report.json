@@ -1,0 +1,238 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Stale portfolio balances come from aa-sync saturating its DB connection pool. Pool use rose from about 22 to 61 at 12:50 and then stayed at 100, and the error rate rose from 0.004 to 0.354 over the same period. portfolio-consumer calls aa-sync (weight 0.8) and consumes the portfolio-updates queue. Its errors rose and the queue consume rate dropped from about 49/s to about 8/s, so the queue backed up to a depth of about 1000 while publishing continued. portfolio-svc is healthy, and the only changes in the window (msg-delivery 12:23, web-app 13:00) do not fit the onset. What started the pool exhaustion is not established: it is either a postgres or query slowdown on holdings_snapshot, or an aa-sync connection leak or load issue, and postgres was not examined.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync database connection pool exhaustion is the fault point. Its requests queue and error, portfolio-consumer's calls to aa-sync fail, portfolio-updates consumption collapses, and balances go stale.",
+   "component": "aa-sync",
+   "cause_type": "connection_pool_exhaustion",
+   "score": 6.35,
+   "confidence": 0.76,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "aa-sync pool_in_use jumped at 12:50, after a flat baseline of about 22",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "aa-sync err_rate rose at the same time as the pool filled",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "portfolio-updates consume_rate started falling at 12:50 from about 49/s",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "First pool exhaustion error in aa-sync logs at 12:50:08",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-consumer calls aa-sync and aa-sync publishes to portfolio-updates, so failures flow from aa-sync to the consumer",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "portfolio-consumer errors rose to 0.28 (effect)",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "portfolio-updates queue depth reached about 1000 (backlog consequence)",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The log text says pool exhausted at 35/100 in use, while the metric shows about 22 before 12:50 and 61 at 12:50. The two disagree slightly; the metric is preferred for sizing.",
+     "evidence_ids": [
+      "E-011"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A postgres or holdings_snapshot query slowdown (or an aa-sync connection leak) holds connections longer and triggered the pool saturation. This is unverified because postgres was not queried and the slow queries may be a consequence of saturation.",
+   "component": "postgres",
+   "cause_type": "slow_queries_holding_connections",
+   "score": 0.8,
+   "confidence": 0.286,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "holdings_snapshot queries slowed progressively while the pool filled (171ms to 400ms)",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "The web-app deploy on the holdings page caused the incident.",
+   "component": "web-app",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "Only changes in the window are a log-level tweak at 12:23 and a UI copy change at 13:00 (after onset); none touched aa-sync",
+     "evidence_ids": [
+      "E-009"
+     ]
+    },
+    {
+     "text": "portfolio-svc was healthy throughout, so it is not the fault point",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync pool_in_use jumped at 12:50, after a flat baseline of about 22",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "aa-sync err_rate rose at the same time as the pool filled",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "portfolio-updates consume_rate started falling at 12:50 from about 49/s",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "First pool exhaustion error in aa-sync logs at 12:50:08",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "holdings_snapshot queries slowed progressively while the pool filled (171ms to 400ms)",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "portfolio-consumer calls aa-sync and aa-sync publishes to portfolio-updates, so failures flow from aa-sync to the consumer",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "portfolio-consumer errors rose to 0.28 (effect)",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "portfolio-svc was healthy throughout, so it is not the fault point",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "Only changes in the window are a log-level tweak at 12:23 and a UI copy change at 13:00 (after onset); none touched aa-sync",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "portfolio-updates queue depth reached about 1000 (backlog consequence)",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The log text says pool exhausted at 35/100 in use, while the metric shows about 22 before 12:50 and 61 at 12:50. The two disagree slightly; the metric is preferred for sizing.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  }
+ ],
+ "unresolved": [
+  "What triggered the pool saturation at about 12:50: postgres slowness, a connection leak, a traffic or consent-refresh spike, or something else. No aa-sync change was found, and postgres metrics and logs were not examined.",
+  "The aa-sync WARN/ERROR log query was truncated (251 matches, only the first 30 seen up to 12:53), so later behaviour is known only from metrics.",
+  "The logged '35/100 in use' for 'exhausted' disagrees with the metric baseline of about 22 and 61 at 12:50.",
+  "portfolio-consumer logs were not inspected to confirm that its errors are aa-sync call failures."
+ ],
+ "actions": [
+  {
+   "text": "Mitigate aa-sync: restart or scale out the instances to release the pool, and temporarily raise the pool size or shed load if safe. Watch pool_in_use and err_rate recover.",
+   "rationale": "The pool has been pinned at 100 since 12:55 and drives the errors that block portfolio-consumer.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-004"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check postgres (active connections, locks, long-running queries on holdings_snapshot) and aa-sync connection handling, to find what started the saturation at about 12:50.",
+   "rationale": "Slow holdings_snapshot queries preceded or accompanied the pool filling, and postgres has not been examined.",
+   "evidence_ids": [
+    "E-005",
+    "E-011"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After aa-sync recovers, confirm portfolio-updates drains (depth falling from about 1000, redeliveries normal) and no messages are lost or duplicated.",
+   "rationale": "The queue backlog and elevated redeliveries are consequences that will linger.",
+   "evidence_ids": [
+    "E-003",
+    "E-010"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerting on aa-sync pool_in_use and review pool sizing and timeouts. Fix the log message so it reports the real pool counts.",
+   "rationale": "The log reported exhaustion at 35/100 while the metric showed different values, and earlier detection would have shortened the impact.",
+   "evidence_ids": [
+    "E-004",
+    "E-011"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 23,
+  "tool_attempts": 23,
+  "llm_calls": 7,
+  "tokens_in": 43948,
+  "tokens_out": 10445,
+  "rounds": 0,
+  "elapsed_s": 124.3
+ },
+ "dropped_claims": 0
+}

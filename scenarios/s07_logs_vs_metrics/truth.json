@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "market-data",
+      "cause_type": "upstream_feed_stalled",
+      "description": "The upstream market-data vendor feed stalled, so prices stopped updating (price age grew to about ten minutes) while the service kept logging heartbeat OK.",
+      "onset": "2026-03-20T10:25:00Z",
+      "decisive": [
+        {
+          "kind": "metric",
+          "service": "market-data",
+          "level": null,
+          "contains": "",
+          "metric": "price_age_s",
+          "min_value": 480.0,
+          "start": "2026-03-20T10:25:00Z",
+          "end": "2026-03-20T11:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "service logs keep reporting 'feed heartbeat ok' while the price-age metric shows the feed is stale"
+}

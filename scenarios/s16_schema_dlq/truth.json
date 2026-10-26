@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "aa-sync",
+      "cause_type": "message_schema_change",
+      "description": "An aa-sync release changed the message schema (a renamed field), so portfolio-consumer validation fails and messages pile up in the dead-letter queue.",
+      "onset": "2026-04-02T11:20:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "portfolio-consumer",
+          "level": "ERROR",
+          "contains": "schema validation failed: unexpected field 'positions' (expected 'holdings')",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-02T11:20:00Z",
+          "end": "2026-04-02T12:20:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "aa-sync",
+          "level": null,
+          "contains": "aa-sync-00633",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-02T11:19:00Z",
+          "end": "2026-04-02T12:20:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "errors appear in the consumer, but the deploy that changed the schema was on the producer"
+}

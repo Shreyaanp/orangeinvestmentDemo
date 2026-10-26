@@ -1,0 +1,200 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most likely cause is the aa-sync deploy at 11:19 (aa-sync-00633, 'normalize holdings payload v2'). Starting at 11:20:04, portfolio-consumer rejects messages on the portfolio-updates queue because they carry the field 'positions' where its schema expects 'holdings'. Rejected messages are redelivered and then dead-lettered. The dead-letter queue reached 2500, redeliveries climbed to about 22/s, consume_rate fell to 18.483, and portfolio-consumer err_rate reached 0.604. The producer-side payload change is the root cause and the consumer's strict validation is the failure point. The log sample is truncated (180 matches, 30 shown), and I did not confirm why only about half of users are affected.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync-00633 changed the published holdings payload (field 'holdings' renamed to 'positions'). portfolio-consumer's strict schema rejects these messages, which are then redelivered and dead-lettered.",
+   "component": "aa-sync",
+   "cause_type": "breaking_message_schema_change",
+   "score": 6.8,
+   "confidence": 0.773,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "aa-sync deployed a payload-format change one minute before the first consumer errors",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "portfolio-consumer rejects messages on a field-name mismatch, starting right after the deploy",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "aa-sync publishes to portfolio-updates and portfolio-consumer consumes from it",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "The dead-letter queue grew to 2500 on the portfolio-updates queue",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "Redeliveries rose sharply, consistent with repeated rejection",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Publish rate stayed steady while consume rate fell, so this is not a producer outage",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "portfolio-consumer error rate rose to 0.604 while latency stayed flat, which points to validation rejects rather than slowness",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "portfolio-consumer-00091 (10:50, 'log level tweak') contributed to the failure. This is unlikely given the 30-minute gap before onset and the nature of the change.",
+   "component": "portfolio-consumer",
+   "cause_type": "consumer_deploy_regression",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "portfolio-consumer also had a deploy at 10:50, described as a log level tweak, well before onset",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "aa-sync deployed a payload-format change one minute before the first consumer errors",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "portfolio-consumer rejects messages on a field-name mismatch, starting right after the deploy",
+     "evidence_ids": [
+      "E-002"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "aa-sync deployed a payload-format change one minute before the first consumer errors",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "portfolio-consumer rejects messages on a field-name mismatch, starting right after the deploy",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "aa-sync publishes to portfolio-updates and portfolio-consumer consumes from it",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "The dead-letter queue grew to 2500 on the portfolio-updates queue",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "Redeliveries rose sharply, consistent with repeated rejection",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Publish rate stayed steady while consume rate fell, so this is not a producer outage",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "portfolio-consumer error rate rose to 0.604 while latency stayed flat, which points to validation rejects rather than slowness",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "portfolio-consumer also had a deploy at 10:50, described as a log level tweak, well before onset",
+   "evidence_ids": [
+    "E-008"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why only about half of users are affected: a partial aa-sync rollout, a mix of payload types, or only some message types changed. This was not verified.",
+  "The log sample covers only 30 of 180 matching errors, so I did not check whether other error types exist later in the window.",
+  "Whether messages with the old 'holdings' field are still being processed successfully was not verified.",
+  "portfolio-consumer-00091 is very likely unrelated, but its diff was not inspected."
+ ],
+ "actions": [
+  {
+   "text": "Roll back aa-sync-00633, or ship a hotfix that emits 'holdings' (or both field names) in the portfolio-updates payload.",
+   "rationale": "This removes the schema mismatch that triggers the rejections at the source.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After the producer is fixed, replay the dead-lettered messages from the portfolio-updates DLQ to portfolio-consumer. Check first whether the 'positions' messages need transformation.",
+   "rationale": "About 2500 portfolio updates are stuck in the DLQ and users are missing them.",
+   "evidence_ids": [
+    "E-004",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Add schema versioning and a contract test between aa-sync and portfolio-consumer, and consider making the consumer tolerate both field names during migrations.",
+   "rationale": "A producer-side payload change broke the consumer with no gate or compatibility layer.",
+   "evidence_ids": [
+    "E-001",
+    "E-002"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Alert on portfolio-updates DLQ growth and on consumer err_rate.",
+   "rationale": "The incident was reported about 30 minutes after onset.",
+   "evidence_ids": [
+    "E-004",
+    "E-007"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 23678,
+  "tokens_out": 6460,
+  "rounds": 0,
+  "elapsed_s": 76.5
+ },
+ "dropped_claims": 0
+}

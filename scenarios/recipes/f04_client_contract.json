@@ -1,0 +1,28 @@
+{
+  "id": "f04_client_contract",
+  "seed": 104,
+  "start": "2026-05-11T13:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "The portfolio page shows an error for many users since about 14:00; the assistant's balance answers still work.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "web-app", "cause_type": "bad_deploy_client_contract", "description": "A web-app release (new account switcher) sends portfolio requests without the required account_id, so portfolio-svc rejects them with 400 and the page errors."},
+      "effects": [
+        {"target": "web-app", "metric": "err_rate", "op": "add", "value": 0.35, "ramp_min": 2},
+        {"target": "portfolio-svc", "metric": "err_rate", "op": "add", "value": 0.25, "ramp_min": 2}
+      ],
+      "logs": [
+        {"service": "portfolio-svc", "level": "WARN", "msg": "rejected request from web-app/5.2.0: 400 missing required parameter 'account_id'", "per_min": 8},
+        {"service": "web-app", "level": "ERROR", "msg": "portfolio request failed with status 400", "per_min": 6, "decisive": false}
+      ],
+      "changes": [{"kind": "deploy", "service": "web-app", "ref": "web-app-00512", "note": "portfolio page v5.2: new account switcher", "offset_min": -1}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 47,
+      "changes": [{"kind": "deploy", "service": "portfolio-svc", "ref": "portfolio-svc-00733", "note": "upgrade json serialization library"}]
+    }
+  ],
+  "trap": "the errors are logged by the callee (portfolio-svc, which also deployed recently) but the cause is the caller's release"
+}

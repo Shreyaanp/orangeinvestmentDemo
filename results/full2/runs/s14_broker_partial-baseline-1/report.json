@@ -1,0 +1,191 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement is failing or stalling because broker-gateway began returning HTTP 503 at about 10:00 UTC. Its err_rate rose from 0.005 at 09:55 to 0.075 at 10:00 and then stayed near 0.105. Its /orders/status endpoint slowed progressively, from 331ms to about 696ms. order-router, orchestrator and web-app errors are all downstream effects of those broker-gateway 503s. The order-router deploy at 09:50 ('log level tweak') is a candidate trigger, but broker-gateway was still healthy at 09:55, so I do not think it is the cause. I could not find why broker-gateway is failing, whether the cause is internal or the upstream broker, because I did not look at its ERROR logs or its own dependencies.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "broker-gateway degraded at about 10:00 (slow /orders/status, then HTTP 503), possibly because of its upstream broker. This is the origin of the order failures, and order-router, orchestrator and web-app errors are consequences. The underlying mechanism is not yet identified.",
+   "component": "broker-gateway",
+   "cause_type": "downstream_broker_degradation_503",
+   "score": 6.2,
+   "confidence": 0.756,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "broker-gateway err_rate was at baseline at 09:55",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "broker-gateway err_rate jumped at 10:00, the earliest deviation",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "order-router sees 503s from broker-gateway from 10:00",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "broker-gateway order status endpoint began slowing at 10:00",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "The endpoint slowness worsened over the following minutes",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "web-app errors are caused by order-router failing, so they are downstream effects",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "order-router calls broker-gateway with high weight, so it is a caller and an effect",
+     "evidence_ids": [
+      "E-008"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The order-router deploy order-router-00455 at 09:50 triggered the failures.",
+   "component": "order-router",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The only change near onset on the affected path is an order-router deploy described as a log level tweak",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "broker-gateway err_rate was at baseline at 09:55",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "broker-gateway order status endpoint began slowing at 10:00",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway err_rate was at baseline at 09:55",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate jumped at 10:00, the earliest deviation",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "order-router sees 503s from broker-gateway from 10:00",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "broker-gateway order status endpoint began slowing at 10:00",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "The endpoint slowness worsened over the following minutes",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "web-app errors are caused by order-router failing, so they are downstream effects",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "The only change near onset on the affected path is an order-router deploy described as a log level tweak",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "order-router calls broker-gateway with high weight, so it is a caller and an effect",
+   "evidence_ids": [
+    "E-008"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why broker-gateway started returning 503 and why /orders/status slowed (internal fault or upstream broker); broker-gateway ERROR logs and its upstream dependencies were not examined.",
+  "Whether the order-router 00455 deploy had any effect; it is unlikely given e1, but not directly ruled out.",
+  "Error logs were truncated at 50 of 74 matches, so error volume after 10:16 was not reviewed.",
+  "Other services such as orchestrator and queues were not checked for independent problems."
+ ],
+ "actions": [
+  {
+   "text": "Inspect broker-gateway ERROR logs and upstream broker connectivity, status and quota from 09:55 to 10:05. Check for a broker outage or throttling, and for a change on the broker side.",
+   "rationale": "broker-gateway is the earliest deviating component, and its callers are failing on its 503s.",
+   "evidence_ids": [
+    "E-002",
+    "E-003",
+    "E-008"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Mitigate customer impact: add backoff or retry limits and show order status clearly to customers, so retries do not add load to broker-gateway.",
+   "rationale": "Customers are retrying, which can amplify load on a degraded broker-gateway.",
+   "evidence_ids": [
+    "E-009",
+    "E-005"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Keep the order-router rollback ready but do not execute it unless broker-gateway checks point to order-router. Verify that 00455 changed nothing beyond log level.",
+   "rationale": "The deploy is a weak candidate: broker-gateway was healthy after it and the change is described as cosmetic.",
+   "evidence_ids": [
+    "E-007",
+    "E-001"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 16,
+  "tool_attempts": 16,
+  "llm_calls": 6,
+  "tokens_in": 47456,
+  "tokens_out": 9143,
+  "rounds": 0,
+  "elapsed_s": 117.2
+ },
+ "dropped_claims": 0
+}

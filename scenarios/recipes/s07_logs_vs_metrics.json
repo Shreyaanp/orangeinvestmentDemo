@@ -1,0 +1,16 @@
+{
+  "id": "s07_logs_vs_metrics",
+  "seed": 7,
+  "start": "2026-03-20T09:30:00Z",
+  "minutes": 120,
+  "incident_at_min": 75,
+  "incident_text": "Users say the assistant quotes stock prices that have not moved in about ten minutes while the market is open.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 55,
+      "truth": {"component": "market-data", "cause_type": "upstream_feed_stalled", "description": "The upstream market-data vendor feed stalled, so prices stopped updating (price age grew to about ten minutes) while the service kept logging heartbeat OK."},
+      "effects": [{"target": "market-data", "metric": "price_age_s", "op": "set", "value": 600, "ramp_min": 5, "decisive": true}]
+    }
+  ],
+  "trap": "service logs keep reporting 'feed heartbeat ok' while the price-age metric shows the feed is stale"
+}

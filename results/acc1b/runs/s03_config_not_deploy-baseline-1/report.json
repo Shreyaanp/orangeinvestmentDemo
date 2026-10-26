@@ -1,0 +1,174 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order failures began at 11:00 UTC, the same minute config change cfg-broker-timeout-ms lowered BROKER_TIMEOUT_MS on broker-gateway from 3000 to 800. broker-gateway err_rate went from 0.005 to 0.203, then 0.225. Its logs show requests aborted for exceeding the 800ms timeout. order-router, web-app and orchestrator then log HTTP 503s from broker-gateway, and order-router err_rate rose from 0.004 to 0.156 and then 0.174. order-router calls broker-gateway with weight 0.8, so its errors are downstream effects. The mean broker latency (about 217ms) is well below 800ms, so the failing requests must be a slow tail. I have no latency percentiles to confirm this, and I have not ruled out an independent broker-side slowdown. No other deploy near onset fits the failure pattern.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "Lowering BROKER_TIMEOUT_MS from 3000 to 800 on broker-gateway made it abort slower broker requests that used to succeed. These surface as 503s to order-router, orchestrator and web-app and cause order failures and timeouts.",
+   "component": "broker-gateway",
+   "cause_type": "config_timeout_too_low",
+   "score": 5.612,
+   "confidence": 0.737,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "Config change to broker-gateway timeout at 11:00, the onset time",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "broker-gateway errors are timeout aborts at the new 800ms value",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "broker-gateway err_rate stepped up exactly at 11:00 after a flat baseline",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router err_rate rose at the same time, a downstream effect",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "order-router depends heavily on broker-gateway",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Callers log 503s from broker-gateway, so errors flow from callee to caller",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "Before the change, occasional slow broker responses were only warnings, not failures",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The broker upstream has a slow latency tail (the earlier 'responded slowly' warnings) that was harmless at the 3000ms timeout and is now exposed. This is a latent condition, not a new fault.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_latency_tail",
+   "score": 0.125,
+   "confidence": 0.059,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Before the change, occasional slow broker responses were only warnings, not failures",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "Config change to broker-gateway timeout at 11:00, the onset time",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "broker-gateway errors are timeout aborts at the new 800ms value",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate stepped up exactly at 11:00 after a flat baseline",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router err_rate rose at the same time, a downstream effect",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "order-router depends heavily on broker-gateway",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Callers log 503s from broker-gateway, so errors flow from callee to caller",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "Before the change, occasional slow broker responses were only warnings, not failures",
+   "evidence_ids": [
+    "E-007"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "The share of broker requests slower than 800ms is not measured, because no percentile latency data was available.",
+  "The error log query was truncated (198 matches, 50 returned), so the full error mix after 11:05 was not reviewed.",
+  "Whether aborted broker requests were still executed on the broker side, and so whether any orders are in an inconsistent state, is unknown.",
+  "The mean latency drop after 11:00 is only an inference (e10).",
+  "An independent broker-side slowdown is not ruled out."
+ ],
+ "actions": [
+  {
+   "text": "Roll back BROKER_TIMEOUT_MS on broker-gateway to 3000 (revert cfg-broker-timeout-ms), or set a value justified by broker p99 latency.",
+   "rationale": "The change coincides with onset and the errors are explicit aborts at the 800ms limit. Reverting should restore the pre-11:00 error rate of about 0.005.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After the rollback, confirm that broker-gateway and order-router err_rate return to about 0.005 and 0.004. Then check that no orders were left in an ambiguous state after aborted broker calls.",
+   "rationale": "This verifies the cause. Aborted requests may have been executed by the broker anyway, so confirmation is needed.",
+   "evidence_ids": [
+    "E-003",
+    "E-004",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Collect broker-gateway latency percentiles (p95, p99) and the slow-request warning rate to choose a safe timeout. Add a review gate and canary for timeout config changes.",
+   "rationale": "Only mean latency is available, so the size of the slow tail is unknown.",
+   "evidence_ids": [
+    "E-007",
+    "E-008"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 9,
+  "tool_attempts": 9,
+  "llm_calls": 3,
+  "tokens_in": 25328,
+  "tokens_out": 8090,
+  "rounds": 0,
+  "elapsed_s": 79.4
+ },
+ "dropped_claims": 0
+}

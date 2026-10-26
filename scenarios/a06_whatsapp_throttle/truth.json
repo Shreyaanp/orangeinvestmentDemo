@@ -1,0 +1,39 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "whatsapp-api",
+      "cause_type": "external_rate_limit",
+      "description": "The WhatsApp Cloud API began rejecting sends with 429 / error 130429 (throughput limit, about 12 messages a minute); the sender retries with backoff, so replies are late and some are given up on.",
+      "onset": "2026-10-23T09:45:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "sender",
+          "level": "WARN",
+          "contains": "130429",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-23T09:45:00Z",
+          "end": "2026-10-23T10:30:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "sender",
+          "level": null,
+          "contains": "",
+          "metric": "err_rate",
+          "min_value": 0.2,
+          "failed_tool": false,
+          "start": "2026-10-23T09:45:00Z",
+          "end": "2026-10-23T10:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "A worker prompt deploy lands three minutes before; worker, LLM and tool telemetry are all normal. The fault is downstream of our code."
+}

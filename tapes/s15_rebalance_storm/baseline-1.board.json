@@ -1,0 +1,208 @@
+{
+ "incident_text": "WhatsApp replies are arriving late for many users, and some never arrive. Started around 09:00.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 9,
+  "tool_attempts": 9,
+  "llm_calls": 3,
+  "tokens_in": 15472,
+  "tokens_out": 3509
+ },
+ "round": 0,
+ "elapsed_s": 40.232400699998834,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "msg-delivery deploy with a batch size increase landed at 08:49, just before the memory climb",
+   "excerpt": "batch size increase for delivery receipts",
+   "source_call_id": "B-04",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:49:00Z",
+   "ref": "e1",
+   "id": "E-001",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "msg-delivery memory pressure began right after the deploy and climbed steadily",
+   "excerpt": "2026-04-01T08:50:15Z WARN msg-delivery: memory usage 59% of limit, gc pressure high",
+   "source_call_id": "B-08",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T08:50:15Z",
+   "ref": "e2",
+   "id": "E-002",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "msg-delivery workers began being OOM-killed at 09:05",
+   "excerpt": "2026-04-01T09:05:39Z ERROR msg-delivery: worker killed: out of memory, restarting consumer",
+   "source_call_id": "B-08",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:05:39Z",
+   "ref": "e3",
+   "id": "E-003",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "Messages were redelivered on outbound-msgs after the kills",
+   "excerpt": "2026-04-01T09:05:59Z WARN msg-delivery: redelivered 7 messages on outbound-msgs",
+   "source_call_id": "B-08",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:05:59Z",
+   "ref": "e4",
+   "id": "E-004",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "outbound-msgs consumers dropped from 4 to 2 and stayed there",
+   "excerpt": "{\"ts\":\"2026-04-01T09:10:00Z\",\"value\":2.0}",
+   "source_call_id": "B-07",
+   "service": "outbound-msgs",
+   "ts": "2026-04-01T09:10:00Z",
+   "ref": "e5",
+   "id": "E-005",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "outbound-msgs depth started rising at 08:55, before the consumer count dropped, then grew steadily",
+   "excerpt": "{\"ts\":\"2026-04-01T08:55:00Z\",\"value\":2.298}",
+   "source_call_id": "B-06",
+   "service": "outbound-msgs",
+   "ts": "2026-04-01T08:55:00Z",
+   "ref": "e6",
+   "id": "E-006",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "msg-delivery memory peaked at the 99% limit and workers restarted up to 5 times in 5 minutes",
+   "excerpt": "\"metric\":\"restarts_5m\",\"stats\":{\"min\":0.0,\"max\":5.0",
+   "source_call_id": "B-09",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:35:00Z",
+   "ref": "e7",
+   "id": "E-007",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "FACT",
+   "claim": "The inbound queue is healthy, so the problem is not upstream of the outbound queue",
+   "excerpt": "\"metric\":\"depth\",\"stats\":{\"min\":0.0,\"max\":0.0,\"mean\":0.0,\"last\":0.0,\"missing\":0}",
+   "source_call_id": "B-01",
+   "service": "inbound-msgs",
+   "ts": "2026-04-01T09:35:00Z",
+   "ref": "e8",
+   "id": "E-008",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-009": {
+   "kind": "FACT",
+   "claim": "msg-delivery consumes only from outbound-msgs, so its failure directly backs up that queue",
+   "excerpt": "{\"direction\":\"consumes_from\",\"name\":\"outbound-msgs\",\"weight\":null}",
+   "source_call_id": "B-05",
+   "service": "msg-delivery",
+   "ts": "2026-04-01T09:35:00Z",
+   "ref": "e9",
+   "id": "E-009",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-010": {
+   "kind": "ASSUMPTION",
+   "claim": "The larger batch size in msg-delivery-00277 probably causes the memory growth, for example by holding more receipts in memory per batch. This is inferred from timing only.",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": null,
+   "ts": null,
+   "ref": "e10",
+   "id": "E-010",
+   "author": "reasoning",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "msg-delivery is OOM-killed with a memory leak or oversized batches, likely introduced by deploy msg-delivery-00277. Consumer capacity on outbound-msgs halves and the backlog grows, so replies are delayed.",
+   "component": "msg-delivery",
+   "cause_type": "memory_exhaustion_oom_after_deploy",
+   "supporting": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-004",
+    "E-005",
+    "E-006",
+    "E-007",
+    "E-009",
+    "E-010"
+   ],
+   "contradicting": [],
+   "compatible_with": [],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "The backlog comes from upstream load or another service (orchestrator or inbound path) rather than from msg-delivery.",
+   "component": "orchestrator",
+   "cause_type": "upstream_overload",
+   "supporting": [],
+   "contradicting": [
+    "E-008",
+    "E-005"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  }
+ },
+ "tasks": {},
+ "challenges": {},
+ "gaps": [],
+ "notes": [
+  "Whether the batch size change in msg-delivery-00277 is the actual cause of the memory growth. The evidence is timing only, and a rollback would test it.",
+  "The msg-delivery logs were truncated at 09:08. Later behaviour and any other error types were not reviewed.",
+  "Why some replies never arrive. The DLQ is 0, so loss may come from OOM kills mid-processing or from expiry, and this was not verified.",
+  "Config changes and WhatsApp-side delivery receipts were not examined. Orchestrator, llm-gateway and the other services were not checked individually."
+ ],
+ "rejected": []
+}

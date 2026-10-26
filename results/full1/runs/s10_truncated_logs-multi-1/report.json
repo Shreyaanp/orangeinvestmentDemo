@@ -1,0 +1,592 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The leading explanation is that the external KYC vendor (kyc-provider) is refusing TCP connections from auth-kyc starting around 09:55:40Z. This drove auth-kyc err_rate from baseline (0.003 at 09:54) to about 0.6 and caused the orchestrator's HTTP 503s on auth-kyc calls, which blocks new-customer signup and KYC. The failure was still ongoing at the last logged errors. No auth-kyc change preceded onset, and Postgres, Redis, RabbitMQ outbound and the web/webhook layers look healthy. Weak spots: the orchestrator logged its first 503 20 seconds before auth-kyc's first vendor error (possible clock skew, not measured), and no vendor-side or network signal was available, so a local egress problem is not ruled out. Orchestrator errors and inbound-msgs redeliveries are most likely downstream effects.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The external KYC vendor (kyc-provider) is refusing TCP connections from auth-kyc from about 09:55, so KYC verification fails, auth-kyc err_rate climbs to ~0.6 and the orchestrator gets HTTP 503s, which blocks new-customer signup and KYC.",
+   "component": "auth-kyc",
+   "cause_type": "external_dependency_outage",
+   "score": 2.35,
+   "confidence": 0.54,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "auth-kyc's earliest ERROR is a KYC vendor TCP connection refusal at 09:55:40Z, matching the reported onset around 09:55.",
+     "evidence_ids": [
+      "E-003",
+      "E-053"
+     ]
+    },
+    {
+     "text": "The same refusal repeats persistently (34 matching WARN/ERROR lines, continuing to at least 10:29:04Z and still ongoing at 10:14:45Z in the window query), so it is not a one-off.",
+     "evidence_ids": [
+      "E-011",
+      "E-012",
+      "E-004"
+     ]
+    },
+    {
+     "text": "auth-kyc err_rate was at baseline at 09:54 (0.003), jumped to 0.303 at 09:55 and plateaued at 0.604 from 09:56; no auth-kyc ERROR or vendor failure appears before 09:55:30.",
+     "evidence_ids": [
+      "E-077",
+      "E-078",
+      "E-055"
+     ]
+    },
+    {
+     "text": "No deploy, config, migration or flag change on auth-kyc preceded onset, and the only changes in the window were three deploys (postgres 09:13, auth-kyc 10:48 after onset, market-data 10:54 after onset). This points away from an internal regression and toward an external cause.",
+     "evidence_ids": [
+      "E-035",
+      "E-062",
+      "E-040"
+     ]
+    },
+    {
+     "text": "Request rate was flat, which weakens a traffic-surge explanation.",
+     "evidence_ids": [
+      "E-018"
+     ]
+    },
+    {
+     "text": "Other candidates look healthy: Postgres, Redis, RabbitMQ and outbound-msgs show no failure, and wa-webhook and web-app show no error spike.",
+     "evidence_ids": [
+      "E-022",
+      "E-024",
+      "E-025",
+      "E-027",
+      "E-028",
+      "E-005",
+      "E-007"
+     ]
+    },
+    {
+     "text": "The orchestrator's rise in errors and the inbound-msgs redeliveries (first at 09:55:41) most likely follow the auth-kyc failures; this is an inference, since the depth timing was not checked. These are downstream effects, not the root cause.",
+     "evidence_ids": [
+      "E-056",
+      "E-072",
+      "E-021"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The orchestrator's first logged 503 (09:55:20Z) precedes auth-kyc's first vendor error (09:55:40Z) by 20 seconds. auth-kyc logged nothing between 09:55:11 and 09:55:40, so either failing requests went unlogged or the ordering reflects clock skew. Neither is established.",
+     "evidence_ids": [
+      "E-052",
+      "E-057",
+      "E-054"
+     ]
+    },
+    {
+     "text": "The topology shows no outbound or vendor edge for auth-kyc, so the auth-kyc to kyc-provider dependency is not confirmed by the topology data, and kyc-provider could not be looked up.",
+     "evidence_ids": [
+      "E-059",
+      "E-039"
+     ]
+    },
+    {
+     "text": "The logs show connection refusal from auth-kyc's side but nothing about the vendor's own state, so 'vendor outage' versus 'path problem' cannot be separated from this data.",
+     "evidence_ids": [
+      "E-076",
+      "E-009"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A network or egress problem local to auth-kyc (firewall, NAT, DNS resolution, endpoint or credential change) blocks its outbound connections to kyc-provider, producing the same connection-refused errors while the vendor itself may be healthy.",
+   "component": "auth-kyc",
+   "cause_type": "network_egress_failure",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "A 'connection refused' pattern is consistent with a network path or endpoint problem rather than an application bug. It is likely, but unverified, that a local egress, firewall, NAT or credential problem could produce the same errors while the vendor is healthy.",
+     "evidence_ids": [
+      "E-064",
+      "E-076"
+     ]
+    },
+    {
+     "text": "The change scan did not cover DNS, firewall or network systems, so a network-side cause is not ruled out.",
+     "evidence_ids": [
+      "E-075"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "No config, migration or flag change on auth-kyc, and no change of any kind across all services before onset, which weakens a locally introduced endpoint or credential change.",
+     "evidence_ids": [
+      "E-035",
+      "E-062",
+      "E-036"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "The orchestrator or the message path is the first failing hop. It logged auth-kyc 503s 20 seconds before auth-kyc's first vendor error, and its failures cascade into inbound-msgs redeliveries, so signup breaks upstream of the vendor.",
+   "component": "orchestrator",
+   "cause_type": "upstream_orchestration_failure",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The orchestrator logged auth-kyc 503s at 09:55:20Z, 20 seconds before auth-kyc's first vendor error, and had no earlier WARN/ERROR lines in the 09:50-09:55:30 window.",
+     "evidence_ids": [
+      "E-052",
+      "E-065",
+      "E-079"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Both services' error rates first deviate in the same 09:55 minute, so the metrics do not show the orchestrator failing first. Within the bucket, order cannot be resolved.",
+     "evidence_ids": [
+      "E-050",
+      "E-051",
+      "E-084"
+     ]
+    },
+    {
+     "text": "The orchestrator's ERROR lines are all auth-kyc HTTP 503s, and its redeliveries start only after the first 503, which fits the orchestrator being affected by auth-kyc rather than failing first.",
+     "evidence_ids": [
+      "E-066",
+      "E-067"
+     ]
+    },
+    {
+     "text": "The orchestrator's error rate (about 0.06) is much lower than auth-kyc's, and auth-kyc is its lowest-weight synchronous callee (0.1), consistent with the orchestrator being an affected caller.",
+     "evidence_ids": [
+      "E-054",
+      "E-045",
+      "E-008"
+     ]
+    },
+    {
+     "text": "The 20-second gap may be clock skew; skew was not measured and no clock warnings were found.",
+     "evidence_ids": [
+      "E-083",
+      "E-082"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "The earliest auth-kyc ERROR in the window is a KYC vendor TCP connection failure at 09:55:40Z, which matches the reported onset around 09:55.",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "The same KYC vendor connection-refused error repeats through at least 10:29:04Z, so it is persistent, not a one-off.",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "wa-webhook err_rate stayed low across the window (max 0.003), which weakens the idea that the webhook is the first failing hop.",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "web-app err_rate stayed low (max 0.004), so the user-facing web app shows no error spike in this window.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "orchestrator err_rate peaked at 0.065 (last 0.063), with latency_ms between 840.899 and 1016.249.",
+   "evidence_ids": [
+    "E-008"
+   ]
+  },
+  {
+   "text": "auth-kyc repeatedly failed to reach the KYC vendor across the window, with 34 matching WARN/ERROR lines.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  },
+  {
+   "text": "The last KYC vendor connection failure in the window was still occurring at 10:14:45Z, so the failure was ongoing when the window ended.",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "auth-kyc request rate stayed in a narrow band, which weakens a traffic-surge explanation for the failures.",
+   "evidence_ids": [
+    "E-018"
+   ]
+  },
+  {
+   "text": "Postgres pool_waiting was flat at zero across the window, so no connection-pool exhaustion is visible.",
+   "evidence_ids": [
+    "E-022"
+   ]
+  },
+  {
+   "text": "Postgres error rate peaked at 0.001 and latency stayed around 8 ms, with no sign of a database-side failure.",
+   "evidence_ids": [
+    "E-024"
+   ]
+  },
+  {
+   "text": "Redis-cache evicted_keys stayed at zero, and hit_ratio stayed high (mean 0.958).",
+   "evidence_ids": [
+    "E-025"
+   ]
+  },
+  {
+   "text": "RabbitMQ error rate was zero for the whole window.",
+   "evidence_ids": [
+    "E-027"
+   ]
+  },
+  {
+   "text": "outbound-msgs had no backlog and no dead-lettering: depth and DLQ were zero, with 4 consumers throughout.",
+   "evidence_ids": [
+    "E-028"
+   ]
+  },
+  {
+   "text": "No deploy, config, migration or flag changes recorded for auth-kyc from 2026-03-24 12:00 to 2026-03-25 10:05 UTC.",
+   "evidence_ids": [
+    "E-035"
+   ]
+  },
+  {
+   "text": "No changes of any kind recorded across all services from 2026-03-24 12:00 to 2026-03-25 09:00 UTC, so nothing shortly before the window explains onset.",
+   "evidence_ids": [
+    "E-036"
+   ]
+  },
+  {
+   "text": "auth-kyc has no outbound call, queue or database edges in the topology returned. Its providers (postgres, redis-cache, rabbitmq, llm-gateway, external KYC) are not confirmed by this data.",
+   "evidence_ids": [
+    "E-039"
+   ]
+  },
+  {
+   "text": "An auth-kyc deploy happened at 10:48 UTC, about 53 minutes after the reported 09:55 onset. Its note is routine and it does not fit as the onset trigger.",
+   "evidence_ids": [
+    "E-040"
+   ]
+  },
+  {
+   "text": "orchestrator calls auth-kyc with weight 0.1, the lowest of its synchronous callees, and calls llm-gateway with weight 0.7, the highest.",
+   "evidence_ids": [
+    "E-045"
+   ]
+  },
+  {
+   "text": "auth-kyc err_rate first deviates from baseline in the 09:55 minute (0.003 at 09:54, 0.303 at 09:55, 0.604 at 09:56).",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "orchestrator err_rate also first deviates in the 09:55 minute (0.004 at 09:54, 0.034 at 09:55, 0.064 at 09:56).",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "The orchestrator's first logged error in the 09:54:00-09:56:30 window is an auth-kyc HTTP 503, 20 seconds before auth-kyc's first logged error.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "auth-kyc's first logged ERROR in the window is a KYC vendor TCP connection refusal.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "auth-kyc logged a healthy KYC status check at 09:55:11, before the orchestrator's first 503. This weakens an auth-kyc-side failure earlier than 09:55:20.",
+   "evidence_ids": [
+    "E-054"
+   ]
+  },
+  {
+   "text": "Over 09:00-09:55:30, the WARN-and-above query returned only OTP-resend WARN lines (11 lines, not truncated). No auth-kyc ERROR or vendor failure appears before 09:55:30, which weakens a pre-existing auth-kyc fault before onset.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "The orchestrator logged message redeliveries on inbound-msgs right after the first 503s (4 messages at 09:55:41, 8 at 09:56:19).",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "auth-kyc's topology shows only one edge, a synchronous caller (orchestrator, weight 0.1). No outbound call, queue or vendor edge is returned.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "Across all kinds (deploy, config, migration, flag) for 08:00-11:00 UTC, only three changes were returned, all deploys. No config, migration or feature-flag change exists in the window, which weakens a configuration-driven cause.",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "orchestrator's first logged ERROR in the 09:50-09:55:30 window is an auth-kyc HTTP 503 at 09:55:20Z, and there are no earlier WARN/ERROR lines in that window; this is the earliest orchestrator failure and it is after 09:55:00.",
+   "evidence_ids": [
+    "E-065"
+   ]
+  },
+  {
+   "text": "In the 09:55:30-10:00 slice, the non-auth-kyc WARN types are inbound-msgs redeliveries and session-resumed notices; the ERROR lines are all auth-kyc HTTP 503.",
+   "evidence_ids": [
+    "E-066"
+   ]
+  },
+  {
+   "text": "The first orchestrator WARN about inbound-msgs redelivery is at 09:55:41Z, which is after the first auth-kyc 503 at 09:55:20Z and after the 09:50-09:55:30 slice, which contains no redelivery lines.",
+   "evidence_ids": [
+    "E-067"
+   ]
+  },
+  {
+   "text": "auth-kyc err_rate was at baseline before onset (0.003 at 09:54) and jumped in the 09:55 minute bucket to 0.303.",
+   "evidence_ids": [
+    "E-077"
+   ]
+  },
+  {
+   "text": "auth-kyc err_rate reached 0.604 in the 09:56 minute bucket, the plateau level for the rest of the window.",
+   "evidence_ids": [
+    "E-078"
+   ]
+  },
+  {
+   "text": "orchestrator logged its first auth-kyc call failure (HTTP 503) at 09:55:20Z, the earliest failure in the queried window.",
+   "evidence_ids": [
+    "E-079"
+   ]
+  },
+  {
+   "text": "A WARN-level search for 'clock' across all services from 09:40 to 10:10 returned no entries, so this query found no clock-skew warnings.",
+   "evidence_ids": [
+    "E-082"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The auth-kyc failures likely start at 09:55 and are caused by the kyc-provider dependency being unreachable from auth-kyc, which would make auth-kyc the first failing service. This still needs the baseline comparison and a check of kyc-provider and network state.",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "The orchestrator's HTTP 503s from auth-kyc may be an effect of auth-kyc being unable to reach the KYC vendor. The 20-second ordering gap could also reflect clock skew, so it is not conclusive.",
+   "evidence_ids": [
+    "E-021"
+   ]
+  },
+  {
+   "text": "The 503s at 09:55:20 and 09:55:25 have no matching auth-kyc log line. auth-kyc logs nothing between 09:55:11 and 09:55:40, so either auth-kyc did not log the failing requests or the 20-second ordering reflects clock skew.",
+   "evidence_ids": [
+    "E-057"
+   ]
+  },
+  {
+   "text": "The failure is probably in the auth-kyc to vendor path (local egress, NAT, firewall, endpoint or credential) rather than in the orchestrator or the vendor's own service, but this is unverified because the vendor edge is not modeled.",
+   "evidence_ids": [
+    "E-064"
+   ]
+  },
+  {
+   "text": "The orchestrator err_rate rise and inbound-msgs redeliveries follow the auth-kyc 503s, consistent with message consumers retrying when KYC calls fail. The 09:55:41 redelivery timing supports this, but the depth timing has not been checked.",
+   "evidence_ids": [
+    "E-072"
+   ]
+  },
+  {
+   "text": "No DNS, network or firewall change is confirmed near the 09:55 onset. The team's change scan (E-043) found no config, migration or flag change in the window, but it did not cover DNS or firewall systems, so a network-side cause is not ruled out.",
+   "evidence_ids": [
+    "E-075"
+   ]
+  },
+  {
+   "text": "The 'connection refused' pattern from auth-kyc to the KYC vendor (E-003, E-004) points at a network path or vendor endpoint rather than an application bug, but this is not verified because kyc-provider cannot be looked up in the topology.",
+   "evidence_ids": [
+    "E-076"
+   ]
+  },
+  {
+   "text": "The orchestrator-first ordering (20 s gap) could be clock skew between hosts, since the query showed no skew evidence and skew was not measured. The gap is not conclusive.",
+   "evidence_ids": [
+    "E-083"
+   ]
+  },
+  {
+   "text": "At 1-minute resolution, the err_rate metric cannot establish whether auth-kyc or the orchestrator failed first within the 09:55 bucket.",
+   "evidence_ids": [
+    "E-084"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Why the vendor connection is refused is unknown: kyc-provider's own state, DNS, network path and egress were not checked, and get_dependencies(kyc-provider) failed with invalid_input (G1, G2).",
+  "The 20-second gap between the orchestrator's first 503 (09:55:20) and auth-kyc's first vendor error (09:55:40) is unexplained. Clock skew was not measured, and no correlation IDs exist to match the events.",
+  "It is not confirmed whether auth-kyc returned the 503s or the orchestrator generated them locally; auth-kyc inbound logs were not queried.",
+  "Several log queries were truncated (auth-kyc ERROR 50 of 94; orchestrator 50 of 103; the 10:00-10:10 slice), and later windows after about 10:10 were not fully covered, so the full failure count and any recovery are unverified.",
+  "Metric summaries disagree across sessions (for example orchestrator peak 0.065 vs 0.064, and inbound-msgs redelivery and depth means), so the exact figures for those are uncertain. The inbound-msgs depth spike could not be placed before or after 09:55.",
+  "The effect on new versus existing customers and a signup/KYC completion-rate metric were not measured.",
+  "Changes outside deploy, config, migration and flag kinds (certificate or credential rotations, secrets, infrastructure, third-party vendor changes, cron jobs) were not checked.",
+  "The postgres 09:13 'metrics label rename' deploy is assumed behavior-neutral, but no diff is available to verify this.",
+  "The critical path (wa-webhook to orchestrator to auth-kyc to vendor) is an assumption inferred from orchestrator edges, not returned by topology calls.",
+  "Past-incident searches returned nothing relevant (INC-0388 does not match), so there is no historical guidance.",
+  "get_dependencies(kyc-provider): invalid_input",
+  "query_metrics returned only summary stats with no points, so I could not compare the 09:00-09:55 baseline with the post-09:55 window or find the exact metric onset.",
+  "The auth-kyc ERROR query was truncated: it returned 50 of 94 lines (limit reached), so later errors and the full count are unverified, and I did not check for WARN lines or other error types.",
+  "I did not query orchestrator, wa-webhook or web-app logs, so the signup/KYC flow-step breakdown and the new-versus-existing-customer split are unverified.",
+  "I did not query kyc-provider, network or the dependency layer, so I cannot say why the TCP connection was refused.",
+  "No signup or KYC completion/success-rate metric was returned, so completion-rate deviation is unmeasured.",
+  "All timestamps are UTC; I did not check host clock skew between wa-webhook and auth-kyc.",
+  "No stack traces or correlation IDs appeared in any result, so sample correlation IDs for failed signups could not be collected.",
+  "postgres, redis-cache and external KYC-provider logs were not queried, so database and vendor-side failures are unverified.",
+  "The orchestrator result was truncated at 50 of 103 lines and the 103 total was not fully read, so the full set of failures is not confirmed.",
+  "The query for the orchestrator used limit 100 but the tool returned 50, which suggests a server-side cap. The truncated results may therefore understate the failures.",
+  "query_metrics was called without a metric name for auth-kyc and with no points, so the onset of err_rate and latency rise is not established. Metrics for orchestrator, wa-webhook and the signup path were not checked.",
+  "No validation, schema or credential errors were observed in the logs, but absence was only checked for the four requested services at WARN and above.",
+  "No logs were checked for the KYC-provider endpoint, DNS, or network path, so the cause of the connection refusal cannot be determined from this data.",
+  "I only retrieved window summaries (min/max/mean/last) with no points, so I cannot place any metric change at or near 09:55 or order it against the KYC failures.",
+  "I did not query the time series for inbound-msgs redeliveries or depth, so I cannot tell whether that spike started before or after 09:55.",
+  "I made six metric calls, which exceeds the roughly five-call budget, and I did not query logs, so no error content behind the inbound redeliveries has been checked.",
+  "Summaries do not show which messages were redelivered or whether any were OTP or KYC traffic, so the msg-delivery and KYC link is unconfirmed.",
+  "Change records carry no author or diff fields, so authors and exact modifications could not be reported.",
+  "get_changes only covers deploy, config, migration and flag kinds. Scheduled jobs/cron, certificate or credential rotations, env var/secret edits, scaling and infrastructure changes, and third-party KYC provider changes were not checked and may exist outside this data.",
+  "The tool returned no changes for wa-webhook, orchestrator, web-app, llm-gateway, redis-cache or rabbitmq in the window. That is a 'no record' result, not proof that nothing changed.",
+  "Because the 2026-03-24 range was checked only for all-services and auth-kyc, a change recorded for another service in that earlier range would not have appeared.",
+  "get_dependencies was not run for wa-webhook, msg-delivery, portfolio-consumer, postgres, redis-cache or rabbitmq, so the queue producers and consumers and the auth-kyc database/cache/provider edges are unverified.",
+  "The auth-kyc topology returned only its caller (orchestrator). Its outbound edges to postgres, redis-cache, rabbitmq, llm-gateway and any external KYC/identity provider are missing, so the downstream blast radius of auth-kyc is unknown.",
+  "search_incidents returned zero results for one query and was not retried with other keywords (for example 'KYC provider', 'onboarding drop-off', 'identity verification'), so the historical check is incomplete.",
+  "Because the call budget (about 4 calls) was used, no further narrowing was done. The 09:13 postgres change and the auth-kyc 10:48 change could not be tied to the failure through logs or metrics here.",
+  "No request or correlation IDs appear in either service's log lines, so no orchestrator 503 can be matched to a specific auth-kyc line. The 20-second ordering is therefore not proven.",
+  "Clock skew between orchestrator and auth-kyc is unverified; no call appears in both services with a shared identifier.",
+  "Metrics are per-minute, so onset is resolved only to the 09:55 minute, not to the second.",
+  "The orchestrator log query ended at 09:56:30 and did not cover later windows. No orchestrator WARN/ERROR query was run beyond the 09:54-09:56:30 window, so the continuation of the 503s is only indirectly visible (E-015, truncated).",
+  "The auth-kyc ERROR query for 09:00-09:55:30 used level WARN, which includes ERROR, so the absence of pre-onset errors covers WARN and ERROR only, not DEBUG or INFO.",
+  "Dependency health (kyc-provider reachability, network) and the auth-kyc to vendor path were not checked by these tools.",
+  "Log searches for DNS, TLS, timeout or 'resolved to' messages (09:30-09:55) were not run. These tools do not include log search, so the observability agent must cover them.",
+  "Other egress from auth-kyc and other callers of the KYC vendor could not be checked. auth-kyc has no outbound edge, and kyc-provider is not a known service, so the vendor's callers are unknown.",
+  "Network, egress, certificate and credential rotations were not checked. get_changes was queried only for deploy, config, migration and flag, and the tool has no network or certificate kind, so their absence is not proven.",
+  "Whether refusals are uniform or intermittent across attempts needs per-attempt logs, which were not available to me.",
+  "Vendor-side health could not be checked: no vendor topology and no vendor signal were returned.",
+  "The 10:00-10:10 slice was truncated (total 51, 50 returned), so the 10:09:51-10:10 tail and any missing line are unverified.",
+  "Retrieved slices account for 76 orchestrator WARN/ERROR lines (3+22+51), not the 103 cited. The remaining lines were not reconciled, and the 10:10-11:00 range was not queried.",
+  "inbound-msgs depth and redeliveries were requested as summaries only, so per-point timing is missing and the depth spike cannot be placed before or after 09:55:20.",
+  "err_rate uses 5-minute buckets, so the exact onset cannot be resolved against 09:55:20. There is no 09:00-09:55 baseline beyond the 09:00-09:50 points.",
+  "Figures in E-008 (peak 0.065) and E-030/E-031 (redelivery mean 5.839, depth mean 0.296) do not match this session's outputs (max 0.064; redelivery mean 2.031; depth mean 0.242). The values above are copied from the tool outputs.",
+  "kyc-provider is not a recognised service or queue name, so its callers, call edges and reachability from other hosts could not be checked (T9-01). A retry under the actual registered name for the external KYC vendor, if one exists, was not attempted.",
+  "No tool exposes vendor status pages, DNS records, or firewall/network-policy change history, so the vendor-status and egress questions cannot be answered from this toolset.",
+  "The search index returned zero hits for KYC/connection-refused terms, so past-incident coverage for this failure mode is effectively absent (T9-02).",
+  "err_rate is only at 1-minute resolution, so sub-minute order between the 09:55:20 orchestrator 503 and auth-kyc's own error rise cannot be determined.",
+  "No clock or NTP offset data was retrieved for the orchestrator or auth-kyc hosts; the 'clock' search (T10-04) was narrow (WARN level, one substring) and its empty result does not rule out skew.",
+  "The orchestrator 503 and auth-kyc WARN/ERROR queries stopped at 10:00, so the later onset and recovery picture is not covered here.",
+  "auth-kyc's own inbound request or 503 logs were not queried, so it is not confirmed whether auth-kyc returned the 503s or the orchestrator generated them locally.",
+  "No kyc-provider metrics or logs were checked, so the vendor-side state behind the connection refusals is unverified."
+ ],
+ "actions": [
+  {
+   "text": "Confirm the state of the KYC vendor (kyc-provider) now: check the vendor status page or contact vendor support, and test TCP connectivity to the vendor endpoint from an auth-kyc host and from a different network.",
+   "rationale": "This separates a vendor outage from a path problem local to auth-kyc, which the logs alone cannot do. Refusals are persistent and ongoing.",
+   "evidence_ids": [
+    "E-003",
+    "E-012",
+    "E-076"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "If the vendor is down, enable any configured fallback or secondary KYC provider, or put signup/KYC into a queued or graceful 'try again later' state for new customers. Only do this if such an option exists.",
+   "rationale": "auth-kyc err_rate is about 0.6 and new-customer signup is blocked; reducing user-facing failures and retries limits damage while the vendor is unavailable. The evidence does not show a fallback exists, so verify first.",
+   "evidence_ids": [
+    "E-001",
+    "E-013",
+    "E-050"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Do not roll back auth-kyc, postgres or other recent deploys as a fix for this incident.",
+   "rationale": "No change preceded onset on auth-kyc; the postgres deploy (09:13, metrics label rename) and the later auth-kyc and market-data deploys do not fit the 09:55 onset.",
+   "evidence_ids": [
+    "E-035",
+    "E-060",
+    "E-061",
+    "E-042"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check egress, DNS, firewall/NAT and certificate or credential rotation history for auth-kyc hosts around 09:50-09:55, and check the host clocks of the orchestrator and auth-kyc.",
+   "rationale": "These were not covered by the change tool and would resolve H2 and the 20-second ordering question.",
+   "evidence_ids": [
+    "E-075",
+    "E-083",
+    "E-057"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Register the external KYC vendor as a modeled dependency of auth-kyc and add monitoring and alerting on vendor connection failures.",
+   "rationale": "The topology had no outbound or vendor edge, so the dependency could not be inspected and there was no early signal.",
+   "evidence_ids": [
+    "E-059",
+    "E-039"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add request or correlation IDs to orchestrator and auth-kyc logs, and log failing inbound requests in auth-kyc.",
+   "rationale": "A specific orchestrator 503 could not be matched to an auth-kyc line, so the ordering stayed unproven.",
+   "evidence_ids": [
+    "E-052",
+    "E-057"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Consider a fallback or circuit-breaker and retry policy for KYC vendor failures, and add a signup/KYC completion-rate metric.",
+   "rationale": "A vendor failure took signup down for the duration, and no completion-rate metric existed to measure impact. No past incident matched this failure mode.",
+   "evidence_ids": [
+    "E-001",
+    "E-046",
+    "E-063"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 44,
+  "tool_attempts": 44,
+  "llm_calls": 33,
+  "tokens_in": 238962,
+  "tokens_out": 59134,
+  "rounds": 2,
+  "elapsed_s": 272.3
+ },
+ "dropped_claims": 0
+}

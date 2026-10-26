@@ -1,0 +1,208 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement failures are most likely caused by the external broker API rate-limiting broker-gateway with HTTP 429. broker-gateway then returns 503 to order-router and orchestrator, and order-router returns 503 to web-app. broker-gateway's rate_limit_remaining reached 0.0 and its err_rate peaked at 0.407, while its rps stayed flat at 37.56-42.686, so the quota was exhausted without a traffic spike on our side. Orchestrator 503s start at 11:55:51, about 4.5 minutes before the first logged 429 at 12:00:20, so the logs do not show exactly how it began; the error log was truncated at 50 of 309 entries. Postgres and rabbitmq are healthy, and the only changes in the window were minor deploys (wa-webhook, web-app) that don't match the failures. Portfolio sync and the slow assistant are not explained yet: I didn't check llm-gateway, portfolio-svc or aa-sync directly.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The external broker API rate-limits broker-gateway (429), which exhausts rate_limit_remaining. broker-gateway then returns 503 to order-router and orchestrator, and order-router returns 503 to web-app, causing the order placement failures.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_rate_limit_exhaustion",
+   "score": 4.2,
+   "confidence": 0.677,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "broker-gateway is receiving 429 rate-limit responses from the broker API",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "order-router fails calling broker-gateway with 503",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "web-app sees order-router 503s, so the failure propagates upstream",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "broker-gateway rate_limit_remaining hit 0 and err_rate rose to 0.407",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "broker-gateway request rate is flat, so there was no traffic spike on our side",
+     "evidence_ids": [
+      "E-006"
+     ]
+    },
+    {
+     "text": "broker-gateway is called by order-router (weight 0.8) and orchestrator (weight 0.3)",
+     "evidence_ids": [
+      "E-009"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Orchestrator was already seeing broker-gateway 503s before the first logged 429",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The slow assistant and portfolio sync failures come from a separate problem, or from retry and latency effects of the broker failures. The evidence cannot separate these.",
+   "component": "orchestrator",
+   "cause_type": "unresolved_secondary_degradation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Orchestrator was already seeing broker-gateway 503s before the first logged 429",
+     "evidence_ids": [
+      "E-004"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Postgres is healthy, with no pool waiting",
+     "evidence_ids": [
+      "E-007"
+     ]
+    },
+    {
+     "text": "portfolio-consumer shows only benign warnings, so there is no direct evidence of portfolio-sync failure there",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway is receiving 429 rate-limit responses from the broker API",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "order-router fails calling broker-gateway with 503",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "web-app sees order-router 503s, so the failure propagates upstream",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "Orchestrator was already seeing broker-gateway 503s before the first logged 429",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining hit 0 and err_rate rose to 0.407",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "broker-gateway request rate is flat, so there was no traffic spike on our side",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "Postgres is healthy, with no pool waiting",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "broker-gateway is called by order-router (weight 0.8) and orchestrator (weight 0.3)",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "portfolio-consumer shows only benign warnings, so there is no direct evidence of portfolio-sync failure there",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why orchestrator saw broker-gateway 503s from 11:55:51, before the first logged 429 at 12:00:20; the error log was truncated at 50 of 309 entries.",
+  "What caused rate_limit_remaining to reach 0 when broker-gateway rps was flat.",
+  "Cause of the portfolio sync failures; aa-sync and portfolio-svc logs were not checked.",
+  "Cause of the slow assistant replies; llm-gateway was not checked."
+ ],
+ "actions": [
+  {
+   "text": "Check the broker API quota and plan limits and contact the broker about the 429s. Reduce or queue order calls to broker-gateway and honour retry-after 30s with backoff and jitter.",
+   "rationale": "rate_limit_remaining is 0 and the broker is returning 429s with retry-after 30s, which drives the 503s to order-router and orchestrator.",
+   "evidence_ids": [
+    "E-001",
+    "E-005",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Identify who else consumes the broker API quota (other keys, batch jobs, retry storms) and check whether the broker changed its limits around 11:55-12:00.",
+   "rationale": "Our rps is flat, so the exhaustion is not explained by our traffic. Orchestrator 503s also start before the first logged 429.",
+   "evidence_ids": [
+    "E-004",
+    "E-006",
+    "E-011"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Investigate the portfolio sync failures (aa-sync, portfolio-svc) and the assistant latency (llm-gateway, orchestrator) with targeted logs and metrics.",
+   "rationale": "These symptoms are not explained by the broker rate limit evidence, and postgres and portfolio-consumer look healthy.",
+   "evidence_ids": [
+    "E-007",
+    "E-010"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerting on broker-gateway rate_limit_remaining and a circuit breaker or graceful degradation message for order placement.",
+   "rationale": "Quota exhaustion was only visible through downstream 503s.",
+   "evidence_ids": [
+    "E-005",
+    "E-002"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 22,
+  "tool_attempts": 22,
+  "llm_calls": 7,
+  "tokens_in": 42661,
+  "tokens_out": 8314,
+  "rounds": 0,
+  "elapsed_s": 101.1
+ },
+ "dropped_claims": 0
+}

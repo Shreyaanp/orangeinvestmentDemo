@@ -1,0 +1,50 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "worker",
+      "cause_type": "bad_config_commit",
+      "description": "A commit lowered the broker tool timeout in config/app.json from 5s to 0.5s; the partner broker API's normal latency (~450ms median) now exceeds it for a large share of calls, so order-status questions get the apology reply.",
+      "onset": "2026-10-20T09:38:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "worker",
+          "level": null,
+          "contains": "6e7b46e",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-20T09:38:00Z",
+          "end": "2026-10-20T10:30:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "worker",
+          "level": "WARN",
+          "contains": "tool broker failed",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-20T09:38:00Z",
+          "end": "2026-10-20T10:30:00Z"
+        },
+        {
+          "kind": "code",
+          "service": "worker",
+          "level": null,
+          "contains": "config/app.json",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-20T09:38:00Z",
+          "end": "2026-10-20T10:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "The broker API itself is healthy (latency unchanged); a sender deploy lands just before. The fault is our own timeout config, visible only in the diff."
+}

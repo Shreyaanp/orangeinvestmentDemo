@@ -1,0 +1,224 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order 'pending' and retries are most likely caused by broker-gateway degrading from about 10:00 UTC. Its GET /orders/status endpoint slows in steps (331ms, 438ms, 570ms, 634ms, 696ms), and order-router, its caller, logs matching timeouts and HTTP 503s. broker-gateway latency peaked at 695.886ms and its err_rate at 0.106, while order-router err_rate reached 0.08. RabbitMQ and the portfolio-updates queue are healthy. The only change near onset is a 'log level tweak' deploy to order-router at 09:50, which does not explain a callee slowing down. Why broker-gateway or its upstream broker slowed is not established; the logs were truncated and I did not check broker-gateway ERROR logs or its dependencies.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "broker-gateway's order status path degraded from about 10:00 (slow responses, 503s), so order-router calls time out or fail and orders stay pending, prompting customer retries. The underlying reason is not identified.",
+   "component": "broker-gateway",
+   "cause_type": "downstream_dependency_degradation",
+   "score": 5.088,
+   "confidence": 0.718,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "broker-gateway order status endpoint begins logging slow responses at 10:00 and latency steps up",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "broker-gateway slowness continues escalating",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "order-router starts getting 503s from broker-gateway at 10:00",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router timeouts toward broker-gateway match the same latency values",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "broker-gateway metrics show elevated error rate and latency over the window",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "order-router calls broker-gateway with the highest weight, so it is a caller of the failing service",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The 09:50 order-router deploy (log level tweak) caused the failures.",
+   "component": "order-router",
+   "cause_type": "bad_deploy",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "Messaging (rabbitmq / portfolio-updates) backlog caused the pending orders.",
+   "component": "rabbitmq",
+   "cause_type": "queue_backlog",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "portfolio-updates queue is healthy",
+     "evidence_ids": [
+      "E-009"
+     ]
+    },
+    {
+     "text": "rabbitmq shows no errors",
+     "evidence_ids": [
+      "E-010"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H4",
+   "statement": "Broker rate limiting on broker-gateway caused the 503s.",
+   "component": "broker-gateway",
+   "cause_type": "rate_limit_exhaustion",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "broker-gateway rate limit is not exhausted",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "broker-gateway order status endpoint begins logging slow responses at 10:00 and latency steps up",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "broker-gateway slowness continues escalating",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "order-router starts getting 503s from broker-gateway at 10:00",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router timeouts toward broker-gateway match the same latency values",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "broker-gateway metrics show elevated error rate and latency over the window",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "broker-gateway rate limit is not exhausted",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "order-router calls broker-gateway with the highest weight, so it is a caller of the failing service",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "portfolio-updates queue is healthy",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "rabbitmq shows no errors",
+   "evidence_ids": [
+    "E-010"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why broker-gateway's /orders/status degraded at about 10:00 (own resource, a dependency, or the upstream broker).",
+  "broker-gateway ERROR logs and the full set of order-router logs after 10:07 were not reviewed because the output was truncated.",
+  "Whether the order-router 09:50 deploy contributed; it looks unlikely but is not excluded.",
+  "The actual effect on order state and duplicate orders from customer retries was not measured."
+ ],
+ "actions": [
+  {
+   "text": "Inspect broker-gateway ERROR logs, its dependencies and its resource metrics (CPU, connections, upstream broker latency) from 09:55 to 10:05 to find why GET /orders/status slows.",
+   "rationale": "The slowdown is established but its cause is not.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-011"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Mitigate: add or tune circuit breaking, timeouts and retry backoff in order-router for broker-gateway calls, and ask clients not to retry orders blindly. Consider failing over or scaling broker-gateway if the cause is capacity.",
+   "rationale": "Timeouts and 503s leave orders pending, and customer retries add load.",
+   "evidence_ids": [
+    "E-003",
+    "E-004",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check with the broker or vendor for upstream degradation around 10:00.",
+   "rationale": "Broker-side slowness would explain the stepped latency, and rate limiting is ruled out by e6.",
+   "evidence_ids": [
+    "E-006",
+    "E-005"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Ensure order idempotency and reconcile orders left pending or duplicated by retries.",
+   "rationale": "Customer retries during the outage risk duplicate orders.",
+   "evidence_ids": [
+    "E-003"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 18,
+  "tool_attempts": 18,
+  "llm_calls": 6,
+  "tokens_in": 50890,
+  "tokens_out": 11712,
+  "rounds": 0,
+  "elapsed_s": 117.4
+ },
+ "dropped_claims": 0
+}

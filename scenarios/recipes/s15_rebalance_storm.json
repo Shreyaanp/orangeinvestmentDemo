@@ -1,0 +1,31 @@
+{
+  "id": "s15_rebalance_storm",
+  "seed": 15,
+  "start": "2026-04-01T08:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 95,
+  "incident_text": "WhatsApp replies are arriving late for many users, and some never arrive. Started around 09:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 50,
+      "truth": {"component": "msg-delivery", "cause_type": "memory_leak_oom_crash_loop", "description": "A msg-delivery release leaks memory, causing out-of-memory kills, a consumer crash loop and queue rebalancing, so outbound messages lag."},
+      "effects": [
+        {"target": "msg-delivery", "metric": "memory_pct", "op": "set", "value": 99, "ramp_min": 15},
+        {"target": "msg-delivery", "metric": "restarts_5m", "op": "set", "value": 5, "ramp_min": 5, "after_min": 15},
+        {"target": "msg-delivery", "metric": "err_rate", "op": "add", "value": 0.2, "ramp_min": 3, "after_min": 15},
+        {"target": "outbound-msgs", "metric": "consumers", "op": "set", "value": 2, "ramp_min": 3, "after_min": 15}
+      ],
+      "logs": [
+        {"service": "msg-delivery", "level": "WARN", "msg": "memory usage {memory_pct}% of limit, gc pressure high", "per_min": 2},
+        {"service": "msg-delivery", "level": "ERROR", "msg": "worker killed: out of memory, restarting consumer", "per_min": 1.5, "after_min": 15},
+        {"service": "rabbitmq", "level": "WARN", "msg": "consumer cancelled: channel closed by msg-delivery, rebalancing consumers", "per_min": 1, "after_min": 15, "decisive": false}
+      ],
+      "changes": [{"kind": "deploy", "service": "msg-delivery", "ref": "msg-delivery-00277", "note": "batch size increase for delivery receipts", "offset_min": -1}]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 55,
+      "effects": [{"target": "orchestrator", "metric": "rps", "op": "mul", "value": 1.25, "ramp_min": 8}]
+    }
+  ],
+  "trap": "queue lag looks like a producer burst; the real cause is a consumer crash loop after a leaky release"
+}

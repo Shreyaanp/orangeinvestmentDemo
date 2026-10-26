@@ -1,0 +1,31 @@
+{
+  "id": "s08_stale_history",
+  "seed": 8,
+  "start": "2026-03-23T13:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "Assistant replies are very slow and some time out since about 14:00, and users report late notifications.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 55,
+      "truth": {"component": "llm-gateway", "cause_type": "provider_rate_limit", "description": "The LLM provider rate-limited llm-gateway (HTTP 429), causing retries, fallbacks and slow or failing assistant replies."},
+      "effects": [
+        {"target": "llm-gateway", "metric": "latency_ms", "op": "mul", "value": 3, "ramp_min": 4},
+        {"target": "llm-gateway", "metric": "err_rate", "op": "add", "value": 0.25, "ramp_min": 4},
+        {"target": "llm-gateway", "metric": "fallback_pct", "op": "set", "value": 0.4, "ramp_min": 4}
+      ],
+      "logs": [
+        {"service": "llm-gateway", "level": "ERROR", "msg": "provider returned 429 rate limited, retrying with backoff", "per_min": 6},
+        {"service": "llm-gateway", "level": "WARN", "msg": "fallback model used for {fallback_pct} of requests", "per_min": 1, "decisive": false}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 50,
+      "effects": [{"target": "redis-cache", "metric": "hit_ratio", "op": "set", "value": 0.9, "ramp_min": 5}]
+    }
+  ],
+  "history_extra": [
+    {"id": "INC-0440", "date": "2026-02-20", "summary": "Slow assistant replies and late notifications", "root_cause": "Cache stampede on hot context after Redis TTL expiry", "fix": "Restarted redis and pre-warmed hot keys"}
+  ],
+  "trap": "a past incident with near-identical symptoms had a different cause; redis hit ratio dips slightly as a bystander"
+}

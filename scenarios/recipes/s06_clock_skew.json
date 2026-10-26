@@ -1,0 +1,24 @@
+{
+  "id": "s06_clock_skew",
+  "seed": 6,
+  "start": "2026-03-19T11:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Order placement and portfolio sync are failing intermittently since about 12:00, and the assistant is slow to reply.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "broker-gateway", "cause_type": "upstream_rate_limit", "description": "The external broker API rate-limited broker-gateway (HTTP 429), so broker calls failed. The orchestrator host's skewed clock made its errors look like they came first."},
+      "effects": [
+        {"target": "broker-gateway", "metric": "err_rate", "op": "add", "value": 0.4, "ramp_min": 3},
+        {"target": "broker-gateway", "metric": "rate_limit_remaining", "op": "set", "value": 0, "ramp_min": 3}
+      ],
+      "logs": [
+        {"service": "broker-gateway", "level": "ERROR", "msg": "broker api returned 429 too many requests, retry-after 30s", "per_min": 5},
+        {"service": "broker-gateway", "level": "WARN", "msg": "rate limit remaining {rate_limit_remaining}", "per_min": 1, "decisive": false}
+      ]
+    }
+  ],
+  "artifacts": [{"kind": "clock_skew", "service": "orchestrator", "offset_s": -300}],
+  "trap": "orchestrator host clock is 5 minutes behind, so its errors appear to precede the real cause"
+}

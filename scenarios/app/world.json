@@ -1,0 +1,52 @@
+{
+  "services": ["wa-webhook", "worker", "redis-session", "llm-gateway", "rds-postgres", "broker-api", "aa-api", "sender", "whatsapp-api"],
+  "edges": [
+    {"caller": "worker", "callee": "redis-session", "weight": 1.0},
+    {"caller": "worker", "callee": "llm-gateway", "weight": 1.0},
+    {"caller": "worker", "callee": "rds-postgres", "weight": 0.5},
+    {"caller": "worker", "callee": "broker-api", "weight": 0.2},
+    {"caller": "worker", "callee": "aa-api", "weight": 0.05},
+    {"caller": "sender", "callee": "whatsapp-api", "weight": 1.0}
+  ],
+  "queues": [
+    {"name": "sqs-inbound", "publisher": "wa-webhook", "consumer": "worker"},
+    {"name": "sqs-outbound", "publisher": "worker", "consumer": "sender"}
+  ],
+  "runtime": {
+    "traffic_mult": 1.0,
+    "llm.latency_mult": 1.0,
+    "llm.error_rate": 0.002,
+    "tool.portfolio.latency_ms": 120, "tool.portfolio.sigma": 0.4, "tool.portfolio.error_rate": 0.003,
+    "tool.broker.latency_ms": 450, "tool.broker.sigma": 0.45, "tool.broker.error_rate": 0.01,
+    "tool.aa.latency_ms": 1800, "tool.aa.sigma": 0.4, "tool.aa.error_rate": 0.02,
+    "prompt.on_tool_error": "apologise",
+    "whatsapp.rate_limit_per_min": 600,
+    "worker.crash_on_kind": "",
+    "worker.crash_error": ""
+  },
+  "intents": [
+    {"name": "balance", "share": 0.35, "tools": ["portfolio"], "texts": ["what's my portfolio worth?", "balance?", "how much is my portfolio today", "kitna hai mera portfolio"]},
+    {"name": "holdings", "share": 0.15, "tools": ["portfolio"], "texts": ["show my holdings", "which stocks do I own?"]},
+    {"name": "order_status", "share": 0.2, "tools": ["broker"], "texts": ["did my order go through?", "status of my INFY order", "order status"]},
+    {"name": "refresh", "share": 0.05, "tools": ["aa"], "texts": ["refresh my bank accounts", "sync my HDFC account"]},
+    {"name": "market", "share": 0.15, "tools": [], "texts": ["how is the market today?", "nifty?"]},
+    {"name": "smalltalk", "share": 0.1, "tools": [], "texts": ["hi", "thanks!", "who are you?"]}
+  ],
+  "kinds": {"text": 0.93, "interactive": 0.05, "image": 0.02},
+  "users": 400,
+  "routine": [
+    {"id": "docs-readme", "kind": "deploy", "service": "worker", "at_min": 0, "title": "docs: describe the session cache", "author": "ananya",
+     "edits": [{"path": "README.md", "find": "Deployed by GitHub Actions", "replace": "Sessions live in Redis (src/session.py). Deployed by GitHub Actions"}]},
+    {"id": "sender-header", "kind": "deploy", "service": "sender", "at_min": 0, "title": "sender: send an explicit content-type header", "author": "rahul",
+     "edits": [{"path": "src/sender.py", "find": "headers={\"Authorization\": f\"Bearer {TOKEN}\"},", "replace": "headers={\"Authorization\": f\"Bearer {TOKEN}\", \"Content-Type\": \"application/json\"},"}]},
+    {"id": "webhook-log", "kind": "deploy", "service": "wa-webhook", "at_min": 0, "title": "webhook: log the message type on enqueue", "author": "rahul",
+     "edits": [{"path": "src/webhook.py", "find": "                sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(msg))\n", "replace": "                print(f\"enqueue {msg['id']} type={msg['type']}\")\n                sqs.send_message(QueueUrl=QUEUE_URL, MessageBody=json.dumps(msg))\n"}]},
+    {"id": "prompt-tone", "kind": "deploy", "service": "worker", "at_min": 0, "title": "prompt: friendlier tone", "author": "meera",
+     "edits": [{"path": "prompts/answer.txt", "find": "Answer in two short sentences, in the user's language.", "replace": "Answer in two short, friendly sentences, in the user's language."}]}
+  ],
+  "history": [
+    {"id": "INC-2025-031", "date": "2025-11-04", "summary": "Replies delayed by up to 20 minutes at market open", "root_cause": "Worker reserved concurrency too low for campaign traffic; SQS backlog", "fix": "Raised worker reserved concurrency to 6"},
+    {"id": "INC-2025-044", "date": "2025-12-12", "summary": "Bot quoted yesterday's portfolio value", "root_cause": "Session cache kept snapshots past their TTL after a Redis failover", "fix": "Flushed the session cache"},
+    {"id": "INC-2026-007", "date": "2026-02-20", "summary": "WhatsApp replies failing for some users", "root_cause": "Free-form messages sent outside the 24h customer-service window (error 131047)", "fix": "Switched those replies to an approved template"}
+  ]
+}

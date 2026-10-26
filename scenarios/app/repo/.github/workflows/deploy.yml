@@ -1,0 +1,19 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt && pytest -q
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::111122223333:role/gha-deploy
+          aws-region: ap-south-1
+      - run: sam build && sam deploy --no-confirm-changeset --stack-name orange-assistant
+      - run: python db/migrate.py

@@ -1,0 +1,197 @@
+{
+ "incident_text": "Customers see 'order pending' for minutes after placing an order, and some retry. Started around 10:00.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 16,
+  "tool_attempts": 16,
+  "llm_calls": 6,
+  "tokens_in": 47456,
+  "tokens_out": 9143
+ },
+ "round": 0,
+ "elapsed_s": 117.17818210000405,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "broker-gateway err_rate was at baseline at 09:55",
+   "excerpt": "{\"ts\":\"2026-03-31T09:55:00Z\",\"value\":0.005}",
+   "source_call_id": "B-15",
+   "service": "broker-gateway",
+   "ts": "2026-03-31T09:55:00Z",
+   "ref": "e1",
+   "id": "E-001",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "broker-gateway err_rate jumped at 10:00, the earliest deviation",
+   "excerpt": "{\"ts\":\"2026-03-31T10:00:00Z\",\"value\":0.075}",
+   "source_call_id": "B-15",
+   "service": "broker-gateway",
+   "ts": "2026-03-31T10:00:00Z",
+   "ref": "e2",
+   "id": "E-002",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "order-router sees 503s from broker-gateway from 10:00",
+   "excerpt": "2026-03-31T10:00:32Z ERROR order-router: broker-gateway call failed: HTTP 503",
+   "source_call_id": "B-13",
+   "service": "order-router",
+   "ts": "2026-03-31T10:00:32Z",
+   "ref": "e3",
+   "id": "E-003",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "broker-gateway order status endpoint began slowing at 10:00",
+   "excerpt": "2026-03-31T10:00:03Z WARN broker-gateway: order status endpoint slow: GET /orders/status took 331ms",
+   "source_call_id": "B-14",
+   "service": "broker-gateway",
+   "ts": "2026-03-31T10:00:03Z",
+   "ref": "e4",
+   "id": "E-004",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "The endpoint slowness worsened over the following minutes",
+   "excerpt": "2026-03-31T10:04:01Z WARN broker-gateway: order status endpoint slow: GET /orders/status took 696ms",
+   "source_call_id": "B-14",
+   "service": "broker-gateway",
+   "ts": "2026-03-31T10:04:01Z",
+   "ref": "e5",
+   "id": "E-005",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "web-app errors are caused by order-router failing, so they are downstream effects",
+   "excerpt": "2026-03-31T10:01:45Z ERROR web-app: order-router call failed: HTTP 503",
+   "source_call_id": "B-13",
+   "service": "web-app",
+   "ts": "2026-03-31T10:01:45Z",
+   "ref": "e6",
+   "id": "E-006",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "The only change near onset on the affected path is an order-router deploy described as a log level tweak",
+   "excerpt": "order-router-00455",
+   "source_call_id": "B-09",
+   "service": "order-router",
+   "ts": "2026-03-31T09:50:00Z",
+   "ref": "e7",
+   "id": "E-007",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "FACT",
+   "claim": "order-router calls broker-gateway with high weight, so it is a caller and an effect",
+   "excerpt": "{\"direction\":\"called_by\",\"name\":\"order-router\",\"weight\":0.8}",
+   "source_call_id": "B-16",
+   "service": "broker-gateway",
+   "ts": "2026-03-31T10:25:00Z",
+   "ref": "e8",
+   "id": "E-008",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-009": {
+   "kind": "ASSUMPTION",
+   "claim": "Customers see 'order pending' and retry because order-router and broker-gateway calls fail or time out; retries may add load",
+   "excerpt": "",
+   "source_call_id": null,
+   "service": "order-router",
+   "ts": "2026-03-31T10:25:00Z",
+   "ref": "e9",
+   "id": "E-009",
+   "author": "reasoning",
+   "reliability": 0.3,
+   "flags": [
+    "assumption"
+   ]
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "broker-gateway degraded at about 10:00 (slow /orders/status, then HTTP 503), possibly because of its upstream broker. This is the origin of the order failures, and order-router, orchestrator and web-app errors are consequences. The underlying mechanism is not yet identified.",
+   "component": "broker-gateway",
+   "cause_type": "downstream_broker_degradation_503",
+   "supporting": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-004",
+    "E-005",
+    "E-006",
+    "E-008"
+   ],
+   "contradicting": [],
+   "compatible_with": [],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "The order-router deploy order-router-00455 at 09:50 triggered the failures.",
+   "component": "order-router",
+   "cause_type": "bad_deploy",
+   "supporting": [
+    "E-007"
+   ],
+   "contradicting": [
+    "E-001",
+    "E-004"
+   ],
+   "compatible_with": [],
+   "status": "active"
+  }
+ },
+ "tasks": {},
+ "challenges": {},
+ "gaps": [],
+ "notes": [
+  "Why broker-gateway started returning 503 and why /orders/status slowed (internal fault or upstream broker); broker-gateway ERROR logs and its upstream dependencies were not examined.",
+  "Whether the order-router 00455 deploy had any effect; it is unlikely given e1, but not directly ruled out.",
+  "Error logs were truncated at 50 of 74 matches, so error volume after 10:16 was not reviewed.",
+  "Other services such as orchestrator and queues were not checked for independent problems."
+ ],
+ "rejected": []
+}

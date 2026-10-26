@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "auth-kyc",
+      "cause_type": "credential_expiry",
+      "description": "auth-kyc's API key for the external KYC vendor expired, so every vendor call is rejected with 401 and KYC checks fail. Nothing was deployed or reconfigured.",
+      "onset": "2026-05-04T11:50:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "auth-kyc",
+          "level": "ERROR",
+          "contains": "kyc vendor rejected request: 401 unauthorized, api key kyc-prod-2025 expired",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-04T11:50:00Z",
+          "end": "2026-05-04T13:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "no change explains the fault (a credential expired); a flag rollout of a new onboarding flow lands two minutes earlier"
+}

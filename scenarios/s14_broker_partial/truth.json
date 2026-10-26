@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "broker-gateway",
+      "cause_type": "order_status_endpoint_degraded",
+      "description": "broker-gateway's order-status endpoint was degraded (slow), so order confirmations arrive late; order-router errors and retries are a consequence.",
+      "onset": "2026-03-31T10:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "broker-gateway",
+          "level": "WARN",
+          "contains": "order status endpoint slow: GET /orders/status took",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-31T10:00:00Z",
+          "end": "2026-03-31T11:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "errors surface in order-router (an effect), while the degraded dependency is broker-gateway"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "s10_truncated_logs",
+  "seed": 10,
+  "start": "2026-03-25T09:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "New customers cannot complete signup and KYC since about 09:55.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 55,
+      "truth": {"component": "auth-kyc", "cause_type": "vendor_outage", "description": "The external KYC vendor used by auth-kyc was down (connection refused), so KYC and signup checks failed."},
+      "effects": [
+        {"target": "auth-kyc", "metric": "err_rate", "op": "add", "value": 0.6, "ramp_min": 2},
+        {"target": "auth-kyc", "metric": "latency_ms", "op": "mul", "value": 4, "ramp_min": 2}
+      ],
+      "logs": [{"service": "auth-kyc", "level": "ERROR", "msg": "kyc vendor connection refused: tcp connect to kyc-provider failed", "per_min": 1.5}]
+    }
+  ],
+  "tool_faults": [{"tool": "query_logs", "kind": "truncate", "max_results": 50}],
+  "trap": "the log tool caps results at 50, so the decisive lines only appear after narrowing the query"
+}

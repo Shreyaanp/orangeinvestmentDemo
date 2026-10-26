@@ -1,0 +1,160 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement failures began at 11:00 UTC, the same minute as the broker-gateway config change BROKER_TIMEOUT_MS 3000 -> 800. order-router logs show HTTP 503 from broker-gateway at 11:00:01Z and then continuously through 11:19. Error rates on both services are elevated: order-router peaked at 0.175 and broker-gateway at 0.226, against minimums of 0.003. The most likely cause is the timeout cut to 800 ms, which makes slower broker calls fail. The summary latency figures (max about 230 ms) do not clearly explain why an 800 ms limit would fail so often, and I did not read broker-gateway logs, so the mechanism is not confirmed.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The broker-gateway config change cutting BROKER_TIMEOUT_MS from 3000 to 800 ms at 11:00 caused broker calls to fail with 503. order-router errors and customer trade timeouts follow from it.",
+   "component": "broker-gateway",
+   "cause_type": "config_change_timeout_too_low",
+   "score": 3.5,
+   "confidence": 0.636,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "Config change on broker-gateway at 11:00, matching incident onset, cut the broker timeout from 3000 to 800 ms",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "order-router started getting 503s from broker-gateway at 11:00:01Z",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "broker-gateway error rate rose from 0.003 to a peak of 0.226 (last value 0.226)",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "order-router error rate is elevated (0.175 at last point) and is downstream of broker-gateway",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "order-router calls broker-gateway with weight 0.8, so errors flow from broker-gateway to order-router",
+     "evidence_ids": [
+      "E-005"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Broker-gateway latency summary shows a max of only about 230 ms, below the new 800 ms timeout. This weakens a pure timeout explanation, or the summary hides tail latency.",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A separate broker-side problem, such as upstream broker slowness or capacity limits, coincides with the config change and is the real source of the 503s. The change would then be a coincidental trigger. This is not ruled out because broker-gateway logs and tail latency were not examined.",
+   "component": "broker-gateway",
+   "cause_type": "upstream_broker_degradation",
+   "score": 1.0,
+   "confidence": 0.333,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Broker-gateway latency summary shows a max of only about 230 ms, below the new 800 ms timeout. This weakens a pure timeout explanation, or the summary hides tail latency.",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "Config change on broker-gateway at 11:00, matching incident onset, cut the broker timeout from 3000 to 800 ms",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "order-router started getting 503s from broker-gateway at 11:00:01Z",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "broker-gateway error rate rose from 0.003 to a peak of 0.226 (last value 0.226)",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "order-router error rate is elevated (0.175 at last point) and is downstream of broker-gateway",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "order-router calls broker-gateway with weight 0.8, so errors flow from broker-gateway to order-router",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "Broker-gateway latency summary shows a max of only about 230 ms, below the new 800 ms timeout. This weakens a pure timeout explanation, or the summary hides tail latency.",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Why does an 800 ms timeout cause roughly 20% errors when summary max latency is about 230 ms? Tail latency (p99) was not queried.",
+  "broker-gateway's own logs were not read, so the 503 source (timeout, rate limit, or upstream broker) is unconfirmed.",
+  "Whether the errors clear after rolling back the timeout is not yet known.",
+  "The postgres dependency of order-router was not checked, though the error pattern points at broker-gateway."
+ ],
+ "actions": [
+  {
+   "text": "Roll back BROKER_TIMEOUT_MS on broker-gateway from 800 to 3000 (cfg-broker-timeout-ms) and watch err_rate on broker-gateway and order-router.",
+   "rationale": "The config change coincides exactly with onset and is the only relevant change near it. Rollback is low-risk and also tests H1.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Pull broker-gateway ERROR logs and p95/p99 latency from 10:55 to now, and check for upstream broker timeouts.",
+   "rationale": "Summary latency stays below 800 ms, so the real failure mechanism is unconfirmed, and H2 must be ruled out if rollback does not clear the errors.",
+   "evidence_ids": [
+    "E-006",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add review and canary checks for timeout config changes, and alerting on broker-gateway 503 rate.",
+   "rationale": "A timeout cut from 3000 to 800 ms reached production with no apparent validation against tail latency.",
+   "evidence_ids": [
+    "E-001"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 24770,
+  "tokens_out": 6412,
+  "rounds": 0,
+  "elapsed_s": 141.7
+ },
+ "dropped_claims": 0
+}

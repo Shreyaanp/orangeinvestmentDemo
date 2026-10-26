@@ -1,0 +1,30 @@
+{
+  "id": "f02_delivery_memory_leak",
+  "seed": 102,
+  "start": "2026-05-06T08:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 100,
+  "incident_text": "WhatsApp replies and portfolio notifications are arriving late, and some not at all, for the last half hour.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 15,
+      "truth": {"component": "msg-delivery", "cause_type": "memory_leak", "description": "msg-delivery leaks memory: heap grows steadily until containers are OOM-killed and restart, so outbound messages back up and deliveries are late or lost."},
+      "effects": [
+        {"target": "msg-delivery", "metric": "memory_pct", "op": "set", "value": 97, "ramp_min": 55},
+        {"target": "msg-delivery", "metric": "restarts_5m", "op": "set", "value": 3, "after_min": 55},
+        {"target": "msg-delivery", "metric": "latency_ms", "op": "mul", "value": 3, "ramp_min": 5, "after_min": 55},
+        {"target": "msg-delivery", "metric": "err_rate", "op": "add", "value": 0.12, "ramp_min": 5, "after_min": 55},
+        {"target": "outbound-msgs", "metric": "consumers", "op": "mul", "value": 0.5, "after_min": 55}
+      ],
+      "logs": [
+        {"service": "msg-delivery", "level": "WARN", "msg": "heap usage {memory_pct}% after full GC, old generation not reclaimed", "per_min": 1},
+        {"service": "msg-delivery", "level": "ERROR", "msg": "container OOMKilled (memory limit 512Mi), restarting", "per_min": 0.5, "after_min": 55}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 68,
+      "changes": [{"kind": "deploy", "service": "orchestrator", "ref": "orchestrator-01207", "note": "tune session resume timeout"}]
+    }
+  ],
+  "trap": "the leak starts long before the symptoms (no sharp onset, no change); an orchestrator deploy lands just as users notice"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "s01_bad_deploy",
+  "seed": 1,
+  "start": "2026-03-12T12:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 95,
+  "incident_text": "Customers report that placing orders fails with an error since around 13:10. Support has 40+ tickets.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 70,
+      "truth": {"component": "order-router", "cause_type": "bad_deploy", "description": "order-router release order-router-00418 introduced a bug in order validation (an unhandled KeyError on limit_price), so order placement fails with exceptions."},
+      "effects": [{"target": "order-router", "metric": "err_rate", "op": "add", "value": 0.3, "ramp_min": 2}],
+      "logs": [{"service": "order-router", "level": "ERROR", "msg": "unhandled exception in place_order: KeyError 'limit_price'", "per_min": 6}],
+      "changes": [{"kind": "deploy", "service": "order-router", "ref": "order-router-00418", "note": "refactor order validation", "offset_min": -1}]
+    }
+  ],
+  "trap": "none (control case)"
+}

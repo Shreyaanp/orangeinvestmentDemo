@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "postgres",
+      "cause_type": "missing_index_after_migration",
+      "description": "A database migration rebuilt the holdings table without recreating its indexes, so queries do sequential scans and slow down; connection-pool exhaustion is a consequence.",
+      "onset": "2026-04-06T10:40:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "postgres",
+          "level": "WARN",
+          "contains": "slow query: seq scan on holdings took",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-06T10:40:00Z",
+          "end": "2026-04-06T11:40:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "postgres",
+          "level": null,
+          "contains": "mig-20260406-0042",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-06T10:39:00Z",
+          "end": "2026-04-06T11:40:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "pool exhaustion in aa-sync looks like the cause but is an effect; the trigger was a migration, not a service deploy"
+}

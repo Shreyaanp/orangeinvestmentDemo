@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "broker-gateway",
+      "cause_type": "config_change_timeout",
+      "description": "A configuration change lowered broker-gateway's broker request timeout (3000ms to 800ms), so many broker calls abort with timeouts. No deploy was involved.",
+      "onset": "2026-03-16T11:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "broker-gateway",
+          "level": "ERROR",
+          "contains": "broker request aborted: exceeded configured timeout of 800ms",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-16T11:00:00Z",
+          "end": "2026-03-16T12:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "broker-gateway",
+          "level": null,
+          "contains": "cfg-broker-timeout-ms",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-16T11:00:00Z",
+          "end": "2026-03-16T12:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "deploy history is clean; the only change is a config change that must be looked up explicitly"
+}

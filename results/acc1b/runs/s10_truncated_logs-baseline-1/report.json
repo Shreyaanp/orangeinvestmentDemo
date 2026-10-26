@@ -1,0 +1,157 @@
+{
+ "status": "INCONCLUSIVE",
+ "status_reason": "top confidence 0.319 is below 0.4",
+ "summary": "New-customer signup and KYC is failing because auth-kyc cannot open TCP connections to the external kyc-provider. The first error is at 09:55:40Z, matching the reported onset of about 09:55, and the errors continue through at least 10:15. auth-kyc's error rate peaked at 0.604 while its request rate stayed flat, so the cause is not a traffic change. The only change in the window is a postgres deploy at 09:13 (metrics label rename), which is 42 minutes before onset and unrelated to the logged error. I could not tell whether the vendor is down or whether auth-kyc's egress path to it is broken, because there is no topology link or health data for kyc-provider.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The external KYC vendor endpoint (kyc-provider) is down or refusing connections, so auth-kyc KYC calls fail and signup cannot complete.",
+   "component": "kyc-provider",
+   "cause_type": "external_dependency_unavailable",
+   "score": 0.938,
+   "confidence": 0.319,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "First auth-kyc error in the window is a refused connection to the KYC vendor, at the incident onset",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "The same error is still occurring 20 minutes later, so the failure is persistent",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "auth-kyc error rate rose to about 60% and was still there at the end of the window",
+     "evidence_ids": [
+      "E-003"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A network, egress or endpoint-configuration problem on the auth-kyc side (for example firewall, DNS or IP change) is blocking connections to a healthy kyc-provider.",
+   "component": "auth-kyc",
+   "cause_type": "egress_network_or_config_failure",
+   "score": 0.05,
+   "confidence": 0.024,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "First auth-kyc error in the window is a refused connection to the KYC vendor, at the incident onset",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "The same error is still occurring 20 minutes later, so the failure is persistent",
+     "evidence_ids": [
+      "E-002"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H3",
+   "statement": "The postgres deploy at 09:13 (postgres-00185) caused the failures.",
+   "component": "postgres",
+   "cause_type": "deploy_regression",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": []
+  }
+ ],
+ "facts": [
+  {
+   "text": "First auth-kyc error in the window is a refused connection to the KYC vendor, at the incident onset",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "The same error is still occurring 20 minutes later, so the failure is persistent",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "auth-kyc error rate rose to about 60% and was still there at the end of the window",
+   "evidence_ids": [
+    "E-003"
+   ]
+  }
+ ],
+ "assumptions": [],
+ "unresolved": [
+  "Whether kyc-provider is actually down or whether auth-kyc's egress path to it is broken (H1 vs H2); no vendor health data or topology link was available.",
+  "Why the error rate is only about 0.6 rather than near 1.0, and which requests succeed.",
+  "The log query was truncated (37 matches, 30 returned); the 10:15-10:20 tail was not reviewed, though err_rate still reads 0.603 at the end.",
+  "Whether other auth-kyc errors besides vendor connection refusals exist; the log search was not broken down by message.",
+  "Whether orchestrator or wa-webhook show any independent problem; they were not queried."
+ ],
+ "actions": [
+  {
+   "text": "Check kyc-provider's status page and contact the vendor to confirm whether it has an outage or has changed or blocked access since about 09:55 UTC.",
+   "rationale": "Logs show TCP connection refused to kyc-provider starting at onset, and the error is still occurring at 10:15.",
+   "evidence_ids": [
+    "E-001",
+    "E-002"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "From an auth-kyc host, test DNS resolution and TCP connectivity to the kyc-provider endpoint, and review egress/firewall and endpoint config changes made outside the change feed.",
+   "rationale": "This separates a vendor outage (H1) from an auth-kyc-side network or config fault (H2). The change feed shows no auth-kyc changes, so any such change would be outside it.",
+   "evidence_ids": [
+    "E-001",
+    "E-006"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "If the vendor is confirmed down, enable a fallback or queue-and-retry for KYC submissions and show customers a clear 'verification delayed' message.",
+   "rationale": "The error rate is about 60% and persistent, so new customers are blocked until the vendor path recovers.",
+   "evidence_ids": [
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Add kyc-provider as a modeled dependency of auth-kyc, with a health probe and an alert on vendor connection errors.",
+   "rationale": "The topology showed only the caller orchestrator and no vendor link, which hid the real dependency.",
+   "evidence_ids": [
+    "E-006"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "No rollback of the postgres 09:13 deploy is needed on current evidence. Re-check only if the vendor path proves healthy.",
+   "rationale": "It is a label rename that predates onset by 42 minutes and does not match the logged error.",
+   "evidence_ids": [
+    "E-005"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 12,
+  "tool_attempts": 12,
+  "llm_calls": 5,
+  "tokens_in": 30519,
+  "tokens_out": 11874,
+  "rounds": 0,
+  "elapsed_s": 127.5
+ },
+ "dropped_claims": 0
+}

@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "aa-sync",
+      "cause_type": "db_pool_exhaustion",
+      "description": "aa-sync exhausted its database connection pool (pool full, requests queued), making account-aggregator sync slow and error-prone and leaving portfolio data stale.",
+      "onset": "2026-03-14T12:50:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "aa-sync",
+          "level": "ERROR",
+          "contains": "connection pool exhausted:",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-14T12:56:00Z",
+          "end": "2026-03-14T14:00:00Z"
+        },
+        {
+          "kind": "log",
+          "service": "aa-sync",
+          "level": "WARN",
+          "contains": "slow query on holdings_snapshot took",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-14T12:50:00Z",
+          "end": "2026-03-14T14:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "unrelated UI deploy 10 minutes after the real onset"
+}

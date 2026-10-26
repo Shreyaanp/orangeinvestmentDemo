@@ -1,0 +1,579 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The leading explanation is that broker-gateway ran out of broker API rate-limit budget from about 12:00. The budget fell from ~898 to 0 by 12:02 at a flat request rate, 429s with retry-after 30s followed, and order-router, broker-gateway and orchestrator error rates ramped in the same minutes. The cause of the budget drain is most likely a broker-side quota or per-key change, or a change in how the budget is charged, though this is not verified. A separate unlogged 503 source may also exist: orchestrator logged 503s and inbound-msgs redeliveries from 11:55:51Z, before any 429, and broker-gateway logs no 503s at all. The slow assistant replies are not tied to the onset: llm-gateway latency (~1.4 s) is flat across 12:00 and has no baseline, so it is likely a separate, constant level. The 503-to-429 link is inferred from timing only.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The broker API rate-limits broker-gateway from about 12:00 (429s with retry-after 30s, rate-limit budget at 0 by 12:02), so calls from order-router fail with 503s, which explains the matching error ramps in order-router, broker-gateway and orchestrator at a flat request rate.",
+   "component": "broker-gateway",
+   "cause_type": "rate_limit_exhaustion",
+   "score": 5.725,
+   "confidence": 0.741,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "broker-gateway's first 429 (retry-after 30s) is at 12:00:20Z and 429s continue through the sampled period, up to 12:55:25Z.",
+     "evidence_ids": [
+      "E-084",
+      "E-053"
+     ]
+    },
+    {
+     "text": "rate_limit_remaining dropped from ~898 at 11:59 to 611 at 12:00 and 298 at 12:01, and reached 0.0 by 12:02, staying there through the end of the window.",
+     "evidence_ids": [
+      "E-076",
+      "E-077"
+     ]
+    },
+    {
+     "text": "Error rates in broker-gateway, order-router and orchestrator all start in the 12:00 minute with similar ramps (broker-gateway to ~0.4, order-router to ~0.32, orchestrator to ~0.12).",
+     "evidence_ids": [
+      "E-075",
+      "E-079",
+      "E-080"
+     ]
+    },
+    {
+     "text": "order-router's heaviest order-path dependency is broker-gateway, and orchestrator also calls it, so both callers are exposed to its failures.",
+     "evidence_ids": [
+      "E-044",
+      "E-042"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The link between the 429s and the callers' 503s is not confirmed. It is likely that the 503s are an effect of the rate limiting, but this rests on timing, and broker-gateway logs no 503s.",
+     "evidence_ids": [
+      "E-033",
+      "E-062",
+      "E-086"
+     ]
+    },
+    {
+     "text": "The counter read 611 and then 298 while 429s were already being logged, so a simple 'budget at zero' explanation does not fit exactly. It is likely a per-key or per-window limit, but the key and window are unknown.",
+     "evidence_ids": [
+      "E-058",
+      "E-061"
+     ]
+    },
+    {
+     "text": "Orchestrator 503s start at 11:55:51Z, before the first 429, which this hypothesis alone does not explain.",
+     "evidence_ids": [
+      "E-141",
+      "E-138"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H4",
+   "statement": "A change at the broker (a lowered quota or per-key limit, or a per-request-type charge) or a changed client or key drained the broker-gateway budget from about 900 to 0 in two minutes at a flat request rate, which triggered the 429s that H1 describes.",
+   "component": "broker-gateway",
+   "cause_type": "broker_quota_or_key_change",
+   "score": 3.913,
+   "confidence": 0.662,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "The budget fell from ~898 to 0 within about two minutes while broker-gateway request volume stayed flat and within its pre-drain band, so the drain is not explained by more requests.",
+     "evidence_ids": [
+      "E-098",
+      "E-099",
+      "E-100",
+      "E-074",
+      "E-096"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "No broker quota, key or client change is visible anywhere. The change query returned no config, migration or flag changes, and no per-key or per-client breakdown exists. If a change occurred, it is not recorded in the evidence.",
+     "evidence_ids": [
+      "E-038",
+      "E-101"
+     ]
+    },
+    {
+     "text": "The rps metric may not count retries or per-key traffic, so a changed client or a retry-driven drain cannot be excluded or confirmed. The mechanism is an assumption.",
+     "evidence_ids": [
+      "E-081",
+      "E-060"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H5",
+   "statement": "An unlogged hop between the callers and broker-gateway (a proxy or load balancer, or a broker-path fault) returns 503s starting around 11:55, which explains why orchestrator logs 503s and inbound-msgs redeliveries before any broker 429 and why broker-gateway logs no 503 at all. The later rate-limit exhaustion is a separate or following problem.",
+   "component": "broker-gateway",
+   "cause_type": "unlogged_intermediate_hop_503",
+   "score": 2.087,
+   "confidence": 0.511,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "Orchestrator logged 12 'broker-gateway call failed: HTTP 503' errors between 11:55:51Z and 11:59:47Z, before the first 429, and no orchestrator 503s were seen before 11:55:51Z.",
+     "evidence_ids": [
+      "E-138"
+     ]
+    },
+    {
+     "text": "inbound-msgs redeliveries start in the same second as the first orchestrator 503, which fits a failure on the broker path from ~11:55.",
+     "evidence_ids": [
+      "E-104"
+     ]
+    },
+    {
+     "text": "broker-gateway logged no 503 at WARN or higher from 11:40 to 12:02, and none from 11:55 to 13:00, so the 503s were not generated or logged by broker-gateway itself.",
+     "evidence_ids": [
+      "E-141",
+      "E-127"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The orchestrator err_rate metric stays at baseline through 11:59, which disagrees with the logged 503s. The 11:55–11:59 failures may be low-volume, or the logs and metric cannot be reconciled.",
+     "evidence_ids": [
+      "E-143"
+     ]
+    },
+    {
+     "text": "The 4-minute lead may be clock skew between hosts rather than a real separate fault. An unlogged hop is an assumption, and no proxy or load balancer evidence exists.",
+     "evidence_ids": [
+      "E-116",
+      "E-136",
+      "E-145"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H3",
+   "statement": "The slow assistant replies are a separate, probably constant, llm-gateway latency level (about 1.4 s) on the orchestrator path, unrelated to the broker rate limit.",
+   "component": "llm-gateway",
+   "cause_type": "downstream_latency_degradation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "orchestrator's heaviest callee is llm-gateway, and llm-gateway latency averages ~1.4 s, which is consistent with slow assistant replies, although no baseline exists.",
+     "evidence_ids": [
+      "E-041"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "llm-gateway latency shows no step at 12:00 (its peak was at 11:45, before onset), so it does not look like an onset-linked degradation.",
+     "evidence_ids": [
+      "E-119"
+     ]
+    },
+    {
+     "text": "llm-gateway fallback rate stayed flat at ~1% across the onset.",
+     "evidence_ids": [
+      "E-122"
+     ]
+    },
+    {
+     "text": "No previous-day baseline was available, so whether 1.4 s is abnormal is unknown. Averaged latency could also hide retry-driven slowness for some users.",
+     "evidence_ids": [
+      "E-124",
+      "E-126"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "The query returned no config, migration, or flag changes for any service in the window, and the result was not truncated or partial. This weakens the hypothesis of a configuration or schema trigger, though the tool may not record those change types.",
+   "evidence_ids": [
+    "E-038"
+   ]
+  },
+  {
+   "text": "orchestrator calls llm-gateway with the highest call weight (0.7), so assistant latency is most exposed to llm-gateway",
+   "evidence_ids": [
+    "E-041"
+   ]
+  },
+  {
+   "text": "orchestrator shares broker-gateway (0.3) and redis-cache (0.3) as callees",
+   "evidence_ids": [
+    "E-042"
+   ]
+  },
+  {
+   "text": "order-router calls broker-gateway with weight 0.8, the heaviest order-path edge, and calls postgres with weight 0.3",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "broker-gateway's 429 lines continue through the end of the returned range, which runs to 12:55:25Z. The result is truncated, so later lines were not returned.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "The counter read 298 at 12:01:33Z, while 429s were still being logged, so the counter was not at zero at that point.",
+   "evidence_ids": [
+    "E-058"
+   ]
+  },
+  {
+   "text": "Every 429 line carries the same 'retry-after 30s' text and names no rate-limit key, scope or window.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "broker-gateway request volume (rps) stayed in its baseline band through the 12:00 onset, with no rise before the budget drained.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate was at baseline at 11:59 and jumped in the 12:00 minute, reaching about 0.4 within two minutes.",
+   "evidence_ids": [
+    "E-075"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining fell from about 898 to 611 in the 12:00 minute and to 298 at 12:01, which is the earliest deviation from baseline.",
+   "evidence_ids": [
+    "E-076"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining reached 0.0 by 12:02 and stayed there through 12:59.",
+   "evidence_ids": [
+    "E-077"
+   ]
+  },
+  {
+   "text": "order-router err_rate starts in the same 12:00 minute as broker-gateway's error rise, with a similar three-minute ramp.",
+   "evidence_ids": [
+    "E-079"
+   ]
+  },
+  {
+   "text": "orchestrator err_rate also starts in the 12:00 minute, the same minute as order-router's error onset.",
+   "evidence_ids": [
+    "E-080"
+   ]
+  },
+  {
+   "text": "broker-gateway's first 429 in the window is at 12:00:20Z. This re-confirms E-026 with a complete query result.",
+   "evidence_ids": [
+    "E-084"
+   ]
+  },
+  {
+   "text": "A search for '503' in broker-gateway logs from 11:55 to 13:00 UTC returned zero lines, with no truncation. broker-gateway does not log 503s in this window.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "broker-gateway rps peaked in the pre-drain period at 42.418 (11:54), so request volume was not elevated before the 12:00 drain.",
+   "evidence_ids": [
+    "E-096"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining fell from 897.901 at 11:59 to 610.896 at 12:00, the first drop of the drain.",
+   "evidence_ids": [
+    "E-098"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining reached 0.0 at 12:02 and stayed there through the last reading at 12:09.",
+   "evidence_ids": [
+    "E-099"
+   ]
+  },
+  {
+   "text": "broker-gateway rps after the drain stayed in the pre-drain band, for example 38.519 at 12:03, so call volume did not spike during the exhaustion.",
+   "evidence_ids": [
+    "E-100"
+   ]
+  },
+  {
+   "text": "The first inbound-msgs redelivery event is 6 messages at 11:55:51Z, in the same second as the first orchestrator 503.",
+   "evidence_ids": [
+    "E-104"
+   ]
+  },
+  {
+   "text": "llm-gateway latency at 11:45 (the window peak, before onset) versus the 12:00 minute, which is not a step up.",
+   "evidence_ids": [
+    "E-119"
+   ]
+  },
+  {
+   "text": "llm-gateway fallback_pct stayed flat at about 1% across the window, including the onset.",
+   "evidence_ids": [
+    "E-122"
+   ]
+  },
+  {
+   "text": "The previous-day (2026-03-18 11:30-13:00) llm-gateway latency_ms query returned no points and null stats, so there is no baseline for the ~1.4 s level.",
+   "evidence_ids": [
+    "E-124"
+   ]
+  },
+  {
+   "text": "broker-gateway logged no lines matching '503' between 11:55 and 13:00 UTC, and the result was not truncated.",
+   "evidence_ids": [
+    "E-127"
+   ]
+  },
+  {
+   "text": "Orchestrator logged 12 'broker-gateway call failed: HTTP 503' errors between 11:55:51Z and 11:59:47Z, before the 12:00 onset. The query (11:45–12:02, no truncation) returned no orchestrator 503s between 11:45:00Z and 11:55:50Z.",
+   "evidence_ids": [
+    "E-138"
+   ]
+  },
+  {
+   "text": "broker-gateway logged no 503 lines at WARN or higher from 11:40 to 12:02, even though orchestrator logged 503s for 'broker-gateway call failed' from 11:55:51Z. The query was not truncated.",
+   "evidence_ids": [
+    "E-141"
+   ]
+  },
+  {
+   "text": "The orchestrator err_rate metric is flat at baseline through 11:59 (0.003–0.006 per minute) and first rises in the 12:00 minute. This disagrees with the logs, which show 503s from 11:55:51Z.",
+   "evidence_ids": [
+    "E-143"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The order-router 503s are an effect of broker-gateway being rate-limited (429s) by the broker API, not an independent failure. The sampled broker-gateway logs do not show the 503 itself, so this link is inferred from timing.",
+   "evidence_ids": [
+    "E-033"
+   ]
+  },
+  {
+   "text": "The 429s are probably a per-key or per-window limit rather than budget exhaustion, because the counter was 611 just before the first 429. The logs do not identify the key or window, so this is unverified.",
+   "evidence_ids": [
+    "E-061"
+   ]
+  },
+  {
+   "text": "Order-router's 503s are a downstream effect of broker-gateway's 429s. No broker-gateway 503 line was found in 12:00–12:05 to confirm the 429-to-503 pairing, so the link is still inferred from timing (E-033 remains unconfirmed).",
+   "evidence_ids": [
+    "E-062"
+   ]
+  },
+  {
+   "text": "Flat rps with a falling rate-limit budget suggests the budget was consumed faster per request, or by a changed client or key, rather than by more requests. The rps metric may not count retries or per-key traffic, so this is unverified.",
+   "evidence_ids": [
+    "E-081"
+   ]
+  },
+  {
+   "text": "The budget drained from about 900 to 0 in roughly two minutes at a flat request rate. This suggests a quota reset or cap change, or that the budget is charged per unit or per request type rather than per request. This is unverified because the metric units and quota definition are not in the results.",
+   "evidence_ids": [
+    "E-101"
+   ]
+  },
+  {
+   "text": "The 11:55–11:59 orchestrator 503s and redeliveries either come from clock skew between orchestrator and broker-gateway, or from a separate broker-path failure that broker-gateway does not log. Orchestrator's own 503 and redelivery lines share a second, so they agree on orchestrator's clock.",
+   "evidence_ids": [
+    "E-116"
+   ]
+  },
+  {
+   "text": "Orchestrator latency is not moving with the broker-gateway error ramp, which weakens the idea that broker retries are slowing orchestrator on average. Per-request tail latency was not measured, so this does not rule out retry-driven slowness for some users.",
+   "evidence_ids": [
+    "E-126"
+   ]
+  },
+  {
+   "text": "The 503s that order-router and orchestrator log are probably relayed or generated at the caller or a hop other than broker-gateway. The untruncated empty broker-gateway searches are consistent with this, but the origin is not confirmed.",
+   "evidence_ids": [
+    "E-136"
+   ]
+  },
+  {
+   "text": "The 503s are probably from a hop in front of broker-gateway (proxy or load balancer) or from misattribution, since broker-gateway logs no 503s. Alternatively, orchestrator and broker-gateway host clocks are skewed. The 4-minute lead is suspicious and is not evidence that orchestrator caused the failures.",
+   "evidence_ids": [
+    "E-145"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Why broker-gateway logged 429s while the counter still read 611 and 298 is unexplained. The rate-limit key, scope and window are unknown.",
+  "The 429-to-503 chain is unconfirmed: broker-gateway logs no 503s, and the 503 origin is unidentified.",
+  "Orchestrator 503s begin at 11:55:51Z, about 4 minutes before the first 429 and order-router's first failure. Whether this is clock skew or a separate fault is unknown, and the orchestrator err_rate metric does not show it.",
+  "No broker quota, key or client change was found. The change tool recorded no config or flag changes and may not track them. No per-key or per-client breakdown exists.",
+  "Several log results were truncated: broker-gateway after 12:47:51Z, order-router 503s after 12:49:45Z, and orchestrator 503s after 12:10 or 12:43. The 12:05–12:15 429 interval was not queried.",
+  "The 11:05 wa-webhook dependency bump has no detail, and its link to the symptoms is unverified.",
+  "Slow assistant replies are unexplained: llm-gateway has no baseline, and tail latency or retry effects were not measured.",
+  "Queue-level metrics for portfolio-updates are missing, and the portfolio sync path is unresolved. portfolio-svc and portfolio-consumer show no errors, so portfolio sync failures are likely via orchestrator, which is inferred.",
+  "The 'intermittent' pattern and success ratio cannot be measured because no success counts are available.",
+  "Summary stats only (no points were requested), so no onset minute, first deviation or timeline is established for any service.",
+  "No previous-day or same-window baseline was compared, so the deviations above are not yet proven to be deviations.",
+  "No per-endpoint or per-status-code breakdown was pulled for order-router or broker-gateway.",
+  "aa-sync and portfolio-consumer were not queried, and the portfolio-updates queue depth and consumer metrics are missing.",
+  "No query_logs calls were made, so there is no WHY evidence (error messages, timeouts or rate-limit responses).",
+  "The tool-call budget (about 5 calls) was used up by the initial summaries, so the remaining checks were not run.",
+  "Summary-only results have no points, so no onset time or deviation from baseline can be seen for any metric. A 12:00 spike could be averaged out.",
+  "rabbitmq exposes no queue-level metrics (depth, consumers, unacked, oldest-message age, redeliveries, dead-letter count) for inbound-msgs, outbound-msgs or portfolio-updates. Whether portfolio-consumer is keeping up is therefore unverified.",
+  "No rabbitmq WARN/ERROR logs were found, but this is not proof of health, since the log query was limited to rabbitmq and returned zero lines.",
+  "postgres CPU, memory, connection-pool usage, locks and slow-query detail are not exposed in the summary. Only pool_waiting and slow_queries are available.",
+  "redis-cache connection errors and redis CPU are not exposed. The err_rate of 0.001 is the only error signal.",
+  "llm-gateway has no upstream rate-limit or token-queue metric; tokens_per_min is present but no queue depth. Rate-limit responses cannot be checked.",
+  "No queries were made to wa-webhook, orchestrator, msg-delivery, portfolio-consumer or order-router. The inbound vs processing vs delivery rate comparison from the hints is not done.",
+  "Call budget (about 5) was reached, so no point-level or per-queue follow-up was possible.",
+  "auth-kyc, market-data and orchestrator were not queried, so their ERROR/WARN logs and any 401/403/429 signatures are unexamined.",
+  "No request or correlation IDs were traced end to end. The order IDs in order-router lines are validation warnings, not the failing calls, so the 503s could not be linked to specific orders, users, brokers or instances.",
+  "broker-gateway output was truncated at 100 of 375 lines and stopped at 12:15:44Z, so later 429s and any 503s it logged were not reviewed.",
+  "The rate-limit counter read 611 at 12:00:11Z, yet 429s were logged from 12:00:20Z. This mismatch is unexplained and may point to per-window or per-key limits, which were not checked.",
+  "No ERROR lines were found for portfolio-svc, aa-sync or portfolio-consumer. This is not proof of health: queue depth, consume rate and redeliveries were not checked, and no query_metrics calls were made.",
+  "Log queries returned no success or latency counts, so the fraction of failing order and portfolio-sync requests could not be estimated.",
+  "Change authors are not present in the returned records (source and url are null), so who made each change is unknown.",
+  "No config, secret, certificate or token expiry, rabbitmq/redis/postgres parameter, llm-gateway model/provider/rate-limit, cron, autoscaling, or third-party/AA broker notice data was returned. The tool may not track these, so their absence is not proof they did not happen.",
+  "Only one query was made, covering all services with a single window. Per-service queries for postgres, rabbitmq, and llm-gateway were not run, so narrower changes could be hidden.",
+  "The 11:05 wa-webhook dependency bump has no detail on which dependency changed, so its link to the symptoms cannot be checked here.",
+  "No get_changes call was made, so no deploy, config, migration or flag changes near 12:00 UTC are known; this is the main gap for matching INC-0431 or INC-0412.",
+  "get_dependencies was not run for broker-gateway, redis-cache, postgres, rabbitmq, portfolio-consumer, llm-gateway, aa-sync or msg-delivery, so their callers, consumers and queue links are unknown.",
+  "No result names a producer or consumer for portfolio-updates; the portfolio sync queue path is unresolved.",
+  "Incident search results have source and url set to null, so past root causes and fixes cannot be checked beyond their summaries.",
+  "Call weights are relative numbers with no units, and topology results carry no timestamps, so they show structure only, not timing or load.",
+  "No broker-gateway 'HTTP 503' or 'upstream' lines were found in 12:00–12:05, so the 429-to-503 pairing is not confirmed. The 503 may be logged under different wording or by order-router, not broker-gateway.",
+  "The 429 query from 12:15:44Z was capped at 200 of 223 matches and ends at 12:55:25Z, so 429s between 12:55:25Z and 13:00Z are unverified.",
+  "The 429s from 12:05 to 12:15:44Z were not queried in this set, so continuity across that interval is unverified.",
+  "The rate-limit key, scope and window are not stated in any returned line, so the link between the 611 counter and the 429s cannot be confirmed.",
+  "The 'rate limit remaining' search covered 12:00:11–12:02:14 and returned only two lines (611 at 12:00:11Z and 298 at 12:01:33Z). No reading exists at 12:02:14Z, so E-027's claim that the counter reached 0.0 by 12:02:14Z is not verified by this result.",
+  "No lines after 13:00 were requested, and the window includes nothing after 13:00Z.",
+  "orchestrator log result was truncated (248 matches; returned lines end at 12:43:19Z), so later errors and any llm-gateway or portfolio-svc citations are unseen.",
+  "No orchestrator line in the returned set cites a 429, llm-gateway timeout, or portfolio-svc call; this is absence within a truncated result, not proof.",
+  "Only summary stats were requested for orchestrator, so the err_rate and latency series have no time points. I cannot establish when err_rate began rising or compare it with the 2026-03-18 baseline.",
+  "portfolio-svc and llm-gateway point-level latency/error series were not queried in this task, so the 1.4 s llm-gateway latency is not baselined.",
+  "The llm-gateway baseline query returned no points, and its stats conflict (null values with missing 0). The previous-day baseline is therefore unavailable from this call.",
+  "Queue-level metrics (inbound-msgs, portfolio-updates) were not queried; redelivery evidence comes only from orchestrator logs.",
+  "Clock skew between orchestrator and broker-gateway is unknown, so the 11:55:51Z-before-12:00:20Z ordering cannot be confirmed as causal.",
+  "Metrics only start at 11:30, so any surge or change before 11:30 (including the 11:05 wa-webhook bump) is not covered by this query.",
+  "No per-key, per-client or per-caller breakdown of broker-gateway request volume was available, so a changed client or key cannot be confirmed or ruled out.",
+  "rps units are not stated, so the rate of budget consumption cannot be checked against request volume.",
+  "The metrics do not show whether rps counts retries, so a retry storm cannot be ruled in or out from rps alone.",
+  "No log queries were run for this task, so the 429 and 503 timing is not cross-checked here.",
+  "orchestrator's own dependency timing (its calls to broker-gateway) was not measured in this task.",
+  "Sub-minute ordering between the rate-limit drop and the error onset is unresolvable at this resolution.",
+  "The post-12:15:44 WARN+ query was truncated (276 matches) and only covered up to 12:47:51Z. The 12:47:51-13:00 window was not examined.",
+  "No success or request-count logs were available, so retries cannot be separated from first-attempt traffic. The 'intermittent' success ratio cannot be measured here.",
+  "broker-gateway metrics were requested as summary only (no points), so the time of rate_limit_remaining dropping to 0 and the rps trend cannot be resolved beyond the summary.",
+  "No per-key rate-limit configuration or change records were checked in this task. That check belongs to the dependency teammate, so a limit change is untested.",
+  "The 503 responses themselves are not logged by broker-gateway. Their logs were not in my scope, so the 503 side of the chain is unverified.",
+  "No broker-gateway point at 12:10, since the last rps and rate_limit_remaining points are at 12:09.",
+  "The metric does not break request rate down by endpoint, caller or request type, so it cannot show which calls consumed the budget.",
+  "The units of rate_limit_remaining and the broker's quota definition are not in the results, so the drain cannot be converted into a request count.",
+  "The metric does not show 429 counts; those come from the logs (E-026), and the broker-gateway logs were truncated at 12:15:44Z (E-028), so they were not re-examined here.",
+  "Orchestrator 503 lines carry no request or correlation ID. Broker-gateway's three pre-12:00 request IDs (277585, 53535, 557098) are on 'slow' warnings and match no orchestrator line, so no single 503 can be matched to a broker entry.",
+  "Broker-gateway logs no 503 in 11:45–12:02, so the 503 origin on the broker path is not visible in its own logs.",
+  "No broker-gateway rate-limit reading exists before 12:00:11Z in this query, so whether the budget was already falling before 12:00 cannot be checked here.",
+  "inbound-msgs redeliveries were requested without points, so there is no per-minute series to align with 11:55:51Z or 12:00.",
+  "The query window ends at 12:02, so nothing after 12:01:39Z (orchestrator 503s) or 12:01 (err_rate) was examined here.",
+  "Clock skew between orchestrator and broker-gateway hosts is neither confirmed nor ruled out; this would need host clock offsets.",
+  "The orchestrator log query filtered on 'contains 503' and 'redeliver' only, so other ERROR types in the orchestrator were not counted.",
+  "No previous-day (2026-03-18) baseline: the query returned zero points and null stats (T12-05), so the ~1.4 s llm-gateway level cannot be compared with normal.",
+  "Only latency_ms and fallback_pct for llm-gateway and latency_ms for orchestrator were pulled as point series. Orchestrator err_rate was not queried at 1-minute resolution, so its timing against broker-gateway is inferred from the earlier summary (E-080) and not checked here.",
+  "The 11:30-11:55 pre-onset segment was not requested separately. Pre/post comparisons use the full 11:30-13:00 series, read by eye, not computed means for each segment.",
+  "Mean and point-level latency do not show tail latency or per-request retries, so averaged metrics may hide slowness for a subset of requests.",
+  "At 1-minute resolution, the order of events inside the 12:00 minute cannot be determined.",
+  "No status-code metric exists for broker-gateway, so the per-code breakdown from 12:00 cannot come from metrics.",
+  "I did not query 429, 2xx, or other 4xx counts from broker-gateway in this call. The only 429 timing comes from earlier claims, which were truncated and are not re-verified here.",
+  "The order-router 503 result is truncated (total 60). Its returned lines stop at 12:49:45Z, so 503s after that are unverified in this call.",
+  "The orchestrator 503 query ended at 12:10:00Z, so its 503s after 12:10 are not in my results (an earlier claim reports one at 12:43:19Z).",
+  "The broker-gateway searches used only the '503' and 'HTTP 5' substrings. Other wording, such as 'unavailable' or 'upstream', was not searched in this call.",
+  "Clock skew between hosts is not ruled out, so the cross-service ordering of first failures is not reliable.",
+  "Clock skew is unverified: no NTP offsets or host clock data were in the results, so the 4-minute lead of orchestrator 503s over broker 429s cannot be confirmed as real or skew.",
+  "Only 11:40–12:02 was checked for broker 429s and 11:45–12:02 for orchestrator and order-router errors, so any earlier 503s or 429s before those windows are unknown. 'First' means first within those windows.",
+  "broker-gateway logs no 503 in this window, so the origin of the orchestrator's 'HTTP 503' is unidentified. The 429-to-503 link remains inferred from timing.",
+  "No orchestrator request-volume metric was checked, so the 12 pre-onset 503s cannot be sized against the err_rate baseline."
+ ],
+ "actions": [
+  {
+   "text": "Contact the broker or check the broker developer console to confirm whether the API quota or per-key limit was lowered, a key was changed, or request-type charging was altered around 12:00, and ask for the limit scope and window.",
+   "rationale": "The budget drained from ~898 to 0 at flat request volume, which points to a quota or charging change rather than traffic. The rate-limit key and window are not stated in the logs.",
+   "evidence_ids": [
+    "E-098",
+    "E-099",
+    "E-100",
+    "E-060"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Reduce broker-gateway call volume to match the available budget: honor the 30s retry-after with backoff and jitter, and shed or queue non-critical broker calls so order placement keeps priority.",
+   "rationale": "Every 429 carries retry-after 30s and the budget has been at 0.0 since 12:02, so extra calls and retries only add failures.",
+   "evidence_ids": [
+    "E-060",
+    "E-077",
+    "E-095"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check for any other client, job or API key using the same broker credentials, and look for retries not counted in rps.",
+   "rationale": "Flat rps with a draining budget suggests a changed client or key, or per-request charging, but rps may not include retries or per-key traffic. This is unverified.",
+   "evidence_ids": [
+    "E-081",
+    "E-101"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Find where the callers' 503s are generated: inspect any proxy, load balancer or service mesh between order-router/orchestrator and broker-gateway, and verify NTP/clock offsets across hosts.",
+   "rationale": "broker-gateway logs no 503s while orchestrator logs them from 11:55:51Z, before the first 429. This could be an intermediate hop or clock skew.",
+   "evidence_ids": [
+    "E-141",
+    "E-138",
+    "E-145"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add rate-limit headroom alerting on rate_limit_remaining, a 429 count metric and per-key or per-caller request metrics for broker-gateway, and log the limit key, scope and window in 429 lines.",
+   "rationale": "The metric dropped to zero within two minutes with no earlier warning, and the logs identify no key or scope.",
+   "evidence_ids": [
+    "E-076",
+    "E-077",
+    "E-060"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Baseline llm-gateway latency against a previous period and measure tail latency for assistant requests to determine whether ~1.4 s is normal.",
+   "rationale": "The previous-day baseline query returned nothing, so the slow-reply complaint is not explained or ruled out.",
+   "evidence_ids": [
+    "E-124",
+    "E-006",
+    "E-126"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 63,
+  "tool_attempts": 63,
+  "llm_calls": 41,
+  "tokens_in": 504056,
+  "tokens_out": 99985,
+  "rounds": 3,
+  "elapsed_s": 396.9
+ },
+ "dropped_claims": 0
+}

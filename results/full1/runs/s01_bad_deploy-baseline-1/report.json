@@ -1,0 +1,149 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Order placement has been failing since about 13:10 UTC because of order-router deploy order-router-00418 (\"refactor order validation\"), made at 13:09. Starting at 13:10:07, order-router logs repeated unhandled `KeyError 'limit_price'` exceptions in place_order, and its err_rate reached 0.305 (last 0.304). The downstream broker-gateway is healthy (err_rate max 0.007, rate limit headroom intact), so this is not a dependency failure. The other deploys in the window (auth-kyc, msg-delivery, llm-gateway) were earlier and are low-risk by their notes. The timing and the exception strongly suggest the refactor broke handling of orders without a limit_price, but I did not inspect the code diff or the request mix.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "Deploy order-router-00418 (order validation refactor) introduced a bug that raises KeyError 'limit_price' in place_order, causing the order failures.",
+   "component": "order-router",
+   "cause_type": "bad_deploy_code_regression",
+   "score": 3.1,
+   "confidence": 0.608,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "order-router deploy 'refactor order validation' landed one minute before the first error",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "First order-router error is a KeyError on limit_price in place_order, 13:10:07",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "order-router error rate rose to about 30%, and 150 matching errors were found (log result truncated)",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "The refactored validation likely assumes limit_price is always present, so orders without it (e.g. market orders) raise KeyError. The code diff and the share of affected orders were not checked.",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ],
+   "contradicting": []
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "A downstream dependency (broker-gateway) is failing and causing the order errors.",
+   "component": "broker-gateway",
+   "cause_type": "dependency_failure",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "broker-gateway, the main callee of order-router, shows no elevated errors",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "First order-router error is a KeyError on limit_price in place_order, 13:10:07",
+     "evidence_ids": [
+      "E-002"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "order-router deploy 'refactor order validation' landed one minute before the first error",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "First order-router error is a KeyError on limit_price in place_order, 13:10:07",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "order-router error rate rose to about 30%, and 150 matching errors were found (log result truncated)",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "broker-gateway, the main callee of order-router, shows no elevated errors",
+   "evidence_ids": [
+    "E-004"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The refactored validation likely assumes limit_price is always present, so orders without it (e.g. market orders) raise KeyError. The code diff and the share of affected orders were not checked.",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "unresolved": [
+  "The code diff of order-router-00418 was not inspected, so the exact missing-field path is unconfirmed.",
+  "The error logs were truncated (150 matches, 30 shown); the full error timeline and any other error types were not reviewed.",
+  "The share of orders affected is unknown (err_rate about 30%), as is whether only certain order types (e.g. market orders) fail.",
+  "Whether any orders were partially submitted to the broker before failing was not checked."
+ ],
+ "actions": [
+  {
+   "text": "Roll back order-router to the version before order-router-00418, or hotfix place_order to handle a missing limit_price (e.g. payload.get('limit_price')).",
+   "rationale": "The error started right after this deploy and is a code-level KeyError in place_order, so a rollback should stop order failures quickly.",
+   "evidence_ids": [
+    "E-001",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "After rollback, confirm order-router err_rate returns to about 0.003 and that the KeyError no longer appears in logs.",
+   "rationale": "Verifies recovery and confirms the deploy was the cause.",
+   "evidence_ids": [
+    "E-002",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Review the order-router-00418 diff and add a regression test for orders with no limit_price. Tell support so affected customers can retry orders.",
+   "rationale": "Prevents recurrence and handles the 40+ tickets from failed orders.",
+   "evidence_ids": [
+    "E-001",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 9,
+  "tool_attempts": 9,
+  "llm_calls": 4,
+  "tokens_in": 20342,
+  "tokens_out": 6008,
+  "rounds": 0,
+  "elapsed_s": 84.9
+ },
+ "dropped_claims": 0
+}

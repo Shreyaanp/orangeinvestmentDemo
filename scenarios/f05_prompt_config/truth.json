@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "orchestrator",
+      "cause_type": "prompt_config_change",
+      "description": "A configuration change switched the orchestrator's planner prompt to version v42, whose output is prose instead of the expected JSON tool plan, so plans fail to parse and conversations abort.",
+      "onset": "2026-05-13T16:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "orchestrator",
+          "level": "ERROR",
+          "contains": "could not parse tool plan from model output (planner prompt v42): expected JSON object, got prose",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-13T16:00:00Z",
+          "end": "2026-05-13T17:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "orchestrator",
+          "level": null,
+          "contains": "cfg-planner-prompt",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-13T16:00:00Z",
+          "end": "2026-05-13T17:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "the change is a config change (not a deploy) and the first change lookup times out; the failure metric sits on llm-gateway, which deployed four minutes earlier"
+}

@@ -1,0 +1,31 @@
+{
+  "id": "s09_metrics_down",
+  "seed": 9,
+  "start": "2026-03-24T14:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 80,
+  "incident_text": "Portfolio pages and the assistant's balance answers are very slow since about 15:10.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 70, "until_min": 105,
+      "truth": {"component": "redis-cache", "cause_type": "cache_stampede", "description": "A cache stampede on redis-cache after a burst of hot-key TTL expiry: the hit ratio collapsed, load fell on postgres, and portfolio-svc slowed."},
+      "effects": [
+        {"target": "redis-cache", "metric": "hit_ratio", "op": "set", "value": 0.35, "ramp_min": 3},
+        {"target": "redis-cache", "metric": "evicted_keys", "op": "set", "value": 8000, "ramp_min": 1},
+        {"target": "redis-cache", "metric": "latency_ms", "op": "mul", "value": 3, "ramp_min": 3},
+        {"target": "postgres", "metric": "latency_ms", "op": "mul", "value": 6, "ramp_min": 4},
+        {"target": "postgres", "metric": "pool_waiting", "op": "set", "value": 35, "ramp_min": 4}
+      ],
+      "logs": [
+        {"service": "redis-cache", "level": "WARN", "msg": "ttl expiry burst: {evicted_keys} hot keys expired within one second", "per_min": 2},
+        {"service": "portfolio-svc", "level": "WARN", "msg": "holdings cache miss rate high: hit_ratio {hit_ratio}, falling back to postgres", "per_min": 4, "series": "redis-cache", "decisive": false},
+        {"service": "postgres", "level": "WARN", "msg": "slow query: holdings lookup took {latency_ms}ms, {pool_waiting} clients waiting", "per_min": 4, "decisive": false}
+      ]
+    }
+  ],
+  "tool_faults": [
+    {"tool": "query_metrics", "kind": "timeout", "on_calls": [1, 2]},
+    {"tool": "query_metrics", "kind": "partial", "on_calls": [3, 4], "max_results": 3}
+  ],
+  "trap": "the metrics tool times out on the first two calls and returns partial data on the next two"
+}

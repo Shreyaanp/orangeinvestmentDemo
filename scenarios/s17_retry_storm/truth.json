@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "order-router",
+      "cause_type": "retry_storm_no_backoff",
+      "description": "order-router retries failed broker calls immediately without backoff (a retry storm), overloading broker-gateway after a brief broker blip that had already recovered.",
+      "onset": "2026-04-03T14:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "order-router",
+          "level": "WARN",
+          "contains": "retrying place_order immediately (attempt 5) without backoff",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-04-03T14:00:00Z",
+          "end": "2026-04-03T15:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "a short broker blip triggered the storm but already recovered; the sustained overload comes from missing retry backoff"
+}

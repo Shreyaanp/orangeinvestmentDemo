@@ -1,0 +1,28 @@
+{
+  "id": "a03_poison_buttons",
+  "seed": 303,
+  "start": "2026-10-21T10:00:00Z",
+  "minutes": 90,
+  "incident_at_min": 68,
+  "incident_text": "Users who tap the quick-reply buttons ('Check balance', 'My orders') get no answer at all. Typed messages work. Since roughly 10:35 UTC.",
+  "changes": [
+    {"id": "list-replies", "kind": "deploy", "service": "worker", "at_min": 33, "title": "feat: support WhatsApp list replies", "author": "vikram",
+     "edits": [{"path": "src/worker.py", "find": "        return msg[\"interactive\"][\"button_reply\"][\"title\"]", "replace": "        return msg[\"interactive\"][\"list_reply\"][\"title\"]"}],
+     "set": {"worker.crash_on_kind": "interactive", "worker.crash_error": "KeyError: 'list_reply' in parse_message (src/worker.py:20)"}}
+  ],
+  "externals": [
+    {"id": "llm-blip", "at_min": 28, "until_min": 38, "set": {"llm.latency_mult": 1.7}}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "list-replies",
+     "truth": {"component": "worker", "cause_type": "code_regression_poison_message", "description": "A worker deploy changed parse_message to read interactive['list_reply']; button replies have no such key, so every interactive message raises KeyError, is retried by SQS three times and lands in the dead-letter queue."},
+     "decisive": [
+       {"kind": "change", "service": "worker"},
+       {"kind": "log", "service": "worker", "level": "ERROR", "contains": "KeyError: 'list_reply'"},
+       {"kind": "metric", "service": "sqs-inbound", "metric": "dlq_depth", "min_value": 5},
+       {"kind": "code", "service": "worker", "contains": "src/worker.py"}
+     ]}
+  ],
+  "trap": "A short LLM latency blip overlaps the deploy; the overall error rate stays low because only ~5% of messages are button taps.",
+  "answerable": true
+}

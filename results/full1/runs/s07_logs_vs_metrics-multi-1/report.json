@@ -1,0 +1,514 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "Most probable root cause: market-data's price-update step stopped applying incoming ticks, while the service itself stayed alive. Prices froze around 10:23-10:24 UTC and price_age_s then climbed about 120 s per minute to its 600 s ceiling by 10:29, where it has stayed. Tick batches and feed heartbeats kept being logged as OK, and error rate, latency and request rate stayed flat, so nothing alerts on it. The stale prices reach users through orchestrator, which calls market-data. Redis cache problems and the broker-gateway 09:52 deploy are not supported by the evidence. The exact mechanism (ingest-to-price-update bug, partial symbol stall, or a wrong price_age_s computation) is not yet separated.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H4",
+   "statement": "market-data's feed connection and publish loop are alive, but the step that applies incoming ticks to the stored price is stuck or only partly working, so it republishes frozen prices and price_age_s climbs from a frozen timestamp.",
+   "component": "market-data",
+   "cause_type": "price_update_path_frozen",
+   "score": 5.0,
+   "confidence": 0.714,
+   "label": "high",
+   "supporting": [
+    {
+     "text": "Tick batches were still logged as published after staleness began (10:20:17 and 10:26:25), so the publish loop is alive while prices are frozen.",
+     "evidence_ids": [
+      "E-071",
+      "E-072",
+      "E-040"
+     ]
+    },
+    {
+     "text": "Feed heartbeats reported ok during the stale window, including at 10:28:36 and 10:32:03 when price_age_s was at its ceiling, so the feed connection appears healthy.",
+     "evidence_ids": [
+      "E-073",
+      "E-074",
+      "E-041"
+     ]
+    },
+    {
+     "text": "price_age_s rose steadily by about 120 s per minute up to 600 s, which fits a frozen last-update timestamp. It is likely that the last good update was around 10:23-10:24, though 1-minute buckets leave the exact onset uncertain.",
+     "evidence_ids": [
+      "E-045",
+      "E-044",
+      "E-048"
+     ]
+    },
+    {
+     "text": "Request rate and latency were steady and no WARN-or-higher lines were logged, so request handling is healthy and the fault sits in the price path. It is likely that this is the ingest or price-update step, but this was not checked against feed timestamps.",
+     "evidence_ids": [
+      "E-014",
+      "E-006",
+      "E-050"
+     ]
+    },
+    {
+     "text": "If the publish path is republishing unchanged prices, that would explain why ticks and heartbeats look normal while the price ages. This is an inference and the data cannot separate it from a metric-computation bug or a partial symbol stall.",
+     "evidence_ids": [
+      "E-076",
+      "E-049"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "There is a gap in tick batches from 10:27:12 to 10:33:58, which could mean a real feed pause. It begins after the stale onset, so it does not explain the start of staleness, and it is not the pattern expected if only the apply step were stuck.",
+     "evidence_ids": [
+      "E-075",
+      "E-077"
+     ]
+    },
+    {
+     "text": "market-data has no tick-rate, ingest or per-symbol metric, and logs show no content of the batches, so a frozen apply step cannot be directly confirmed. A wrong price_age_s computation or a subset of symbols stalling would look the same.",
+     "evidence_ids": [
+      "E-046",
+      "E-049",
+      "E-078"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H1",
+   "statement": "market-data lost its upstream price feed silently (vendor session timeout or credential expiry) around 10:23-10:24, so it keeps serving the last-known price while request handling stays healthy, and orchestrator relays the stale quotes.",
+   "component": "market-data",
+   "cause_type": "upstream_feed_stall",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The abrupt onset without any logged change, and the lack of an identifiable feed source in the graph, is consistent with a vendor session timeout or credential expiry. It is likely only a possibility, since the change log cannot see credential expiry.",
+     "evidence_ids": [
+      "E-067",
+      "E-064",
+      "E-023"
+     ]
+    },
+    {
+     "text": "price_age_s jumped from about 2 s at 10:24 to a stale value at 10:25 and then climbed to 600 s, matching a sudden stop in fresh data.",
+     "evidence_ids": [
+      "E-044",
+      "E-045"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Tick batches and feed heartbeats kept being logged as ok during the stale window, which cuts against a silently dead feed.",
+     "evidence_ids": [
+      "E-071",
+      "E-072",
+      "E-073",
+      "E-074"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H2",
+   "statement": "A quote cache in redis-cache is stuck (a non-expiring TTL or a failed writer), so orchestrator reads old quotes even if market-data is fresh.",
+   "component": "redis-cache",
+   "cause_type": "cache_entry_not_refreshing",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "redis-cache is on the path used by orchestrator, so a stuck quote key would surface to users. Steady hit ratio and zero evictions are equally consistent with healthy caching, so this is not established.",
+     "evidence_ids": [
+      "E-025",
+      "E-060"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "price_age_s is already stale at market-data, which is the earlier hop, so a cache fault is not needed to explain the symptom.",
+     "evidence_ids": [
+      "E-002",
+      "E-011"
+     ]
+    },
+    {
+     "text": "redis-cache showed no error signal and no write-failure, OOM or readonly warnings.",
+     "evidence_ids": [
+      "E-056",
+      "E-051"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 4,
+   "hypothesis_id": "H3",
+   "statement": "The broker-gateway 09:52 deploy (metrics label rename) subtly broke a price-related path, producing slightly elevated broker errors and delayed or stale price data reaching users.",
+   "component": "broker-gateway",
+   "cause_type": "bad_code_release",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "The broker-gateway deploy at 09:52 is the only recorded change in the window, and broker-gateway error rate was slightly non-zero.",
+     "evidence_ids": [
+      "E-020",
+      "E-015"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "The deploy note describes a metrics label rename, it was about 30 minutes before onset, and price_age_s stayed near baseline until 10:20. It is probably not the trigger, though the diff was not checked.",
+     "evidence_ids": [
+      "E-020",
+      "E-001",
+      "E-026"
+     ]
+    },
+    {
+     "text": "Broker-gateway rate-limit headroom stayed high, and only one isolated slow response was logged.",
+     "evidence_ids": [
+      "E-016",
+      "E-017"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "market-data price_age_s was near its baseline of about 2 seconds right up to 10:20 UTC.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "market-data price_age_s jumped from about 2s to 360.796s in the 10:25 bucket, the first clearly stale sample.",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "market-data logged no WARN-or-higher lines between 10:00 and 11:30 UTC, so the staleness has no logged error.",
+   "evidence_ids": [
+    "E-006"
+   ]
+  },
+  {
+   "text": "market-data latency and request rate were steady across the window, with no sign of a drop in throughput.",
+   "evidence_ids": [
+    "E-014"
+   ]
+  },
+  {
+   "text": "broker-gateway error rate was low but not zero, with a maximum of 0.007 and a last value of 0.006.",
+   "evidence_ids": [
+    "E-015"
+   ]
+  },
+  {
+   "text": "broker-gateway rate-limit headroom stayed high and did not approach zero, which weakens a rate-limit explanation.",
+   "evidence_ids": [
+    "E-016"
+   ]
+  },
+  {
+   "text": "broker-gateway logged a single slow broker response in the 10:20-11:00 window. This is one isolated event, not a sustained pattern.",
+   "evidence_ids": [
+    "E-017"
+   ]
+  },
+  {
+   "text": "Only deploy in the window on the broker-gateway service, 09:52 UTC, note 'metrics label rename'. It is the nearest change before onset (about 40 minutes earlier) but the note suggests no price-path change.",
+   "evidence_ids": [
+    "E-020"
+   ]
+  },
+  {
+   "text": "The change query for all services and kinds (deploy, config, migration, flag) returned three items, not truncated and not partial. No config, migration or flag change appears for any service in the window, and none for market-data or redis-cache.",
+   "evidence_ids": [
+    "E-023"
+   ]
+  },
+  {
+   "text": "redis-cache is called by orchestrator (weight 0.3) and portfolio-svc (weight 0.2). A stale or frozen cache would surface in both paths.",
+   "evidence_ids": [
+    "E-025"
+   ]
+  },
+  {
+   "text": "market-data logged regular heartbeats and tick batch publishes through the stale period, and the last line in the window is still a publish at 10:34:59.",
+   "evidence_ids": [
+    "E-040"
+   ]
+  },
+  {
+   "text": "A heartbeat was logged as OK at 10:30:42, while price_age_s was already at its 600 ceiling.",
+   "evidence_ids": [
+    "E-041"
+   ]
+  },
+  {
+   "text": "price_age_s was 121.605 at 10:25, an increase of about 120 s from the 10:24 reading.",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "price_age_s rose in steps of about 120 s per minute (241.181 at 10:26, 360.796 at 10:27, 480.399 at 10:28) and reached the 600.0 ceiling at 10:29, where it stayed at 10:30.",
+   "evidence_ids": [
+    "E-045"
+   ]
+  },
+  {
+   "text": "The metric list for market-data has only four metrics: err_rate, latency_ms, price_age_s and rps. No tick-rate, ingest, subscription or reconnect metric exists.",
+   "evidence_ids": [
+    "E-046"
+   ]
+  },
+  {
+   "text": "redis-cache logged no write-failure, OOM or readonly WARN lines in 10:10-10:35; its only WARN lines were four slowlog entries, which are not write errors.",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "redis-cache error rate was near zero in the window (max 0.001), so the cache reports no failure signal.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "The change query was complete, not truncated or partial, and returned one item. This supports the absence of config, secret, migration or flag changes in the window, though the tool cannot see credential expiry or scheduled jobs.",
+   "evidence_ids": [
+    "E-064"
+   ]
+  },
+  {
+   "text": "Tick batches were still being published during the stale period, at 10:20:17 UTC.",
+   "evidence_ids": [
+    "E-071"
+   ]
+  },
+  {
+   "text": "Tick batches continued at 10:26:25 UTC, after the 10:25 sample where price_age_s first jumped to about 360 s.",
+   "evidence_ids": [
+    "E-072"
+   ]
+  },
+  {
+   "text": "The feed reported healthy during the stale window, at 10:23:58 UTC.",
+   "evidence_ids": [
+    "E-073"
+   ]
+  },
+  {
+   "text": "Feed heartbeats continued to report ok at 10:28:36 UTC and 10:32:03 UTC, while price_age_s was at its ceiling.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "The only gap in tick batches is between 10:27:12 and 10:33:58 UTC (about 6.8 minutes). It starts after the reported onset.",
+   "evidence_ids": [
+    "E-075"
+   ]
+  },
+  {
+   "text": "market-data price_age_s is a single aggregate series over the full window (min 1.928, max 600.0, mean 315.954, last 600.0, no missing points). No per-symbol breakdown is returned.",
+   "evidence_ids": [
+    "E-078"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "market-data is the earliest hop where prices go stale, so the problem sits at or before market-data. Redis, orchestrator and llm-gateway may be serving the same stale values, but this was not verified.",
+   "evidence_ids": [
+    "E-011"
+   ]
+  },
+  {
+   "text": "The broker-gateway 09:52 deploy is probably not the trigger: its note describes a metrics label rename, and no dependency edge links broker-gateway to market-data or redis-cache in the results. This has not been verified against the diff.",
+   "evidence_ids": [
+    "E-026"
+   ]
+  },
+  {
+   "text": "The steady ~120 s/min climb suggests price_age_s is measured against a frozen last-update timestamp, with the last good update around 10:23-10:24. The 1-minute bucket values are coarse, so the exact onset is not pinned down. This revises E-010's 10:19-10:20 estimate.",
+   "evidence_ids": [
+    "E-048"
+   ]
+  },
+  {
+   "text": "Logs saying ticks are published while price_age_s grows points to one of three causes that the current data cannot separate: (a) the publish path is sending stale or frozen prices, (b) the price_age_s computation is wrong, or (c) only a subset of symbols has stopped updating while the rest keep publishing.",
+   "evidence_ids": [
+    "E-049"
+   ]
+  },
+  {
+   "text": "The staleness is probably in market-data's ingest or price path, not in request handling, because err_rate and latency stay flat while price_age_s rises. This is an inference and has not been checked against feed timestamps.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "The steady rps, hit ratio and zero evictions are consistent with a non-expiring or stuck quote key, but they are equally consistent with healthy caching, so this is not established. Confirming it needs per-key age or TTL data and set/get counts, which were not available.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "The abrupt onset near 10:20 UTC with no deploy or logged change is consistent with a credential or secret expiry, or a vendor-side session timeout, but nothing in the tool results confirms either. This needs a check of the feed session and secret expiry records.",
+   "evidence_ids": [
+    "E-067"
+   ]
+  },
+  {
+   "text": "The feed is publishing, but the published prices for the affected symbols are not refreshing, or price_age_s is measured from a different timestamp than the tick. The stale values may therefore come from the ingest-to-price-update step rather than a stopped feed.",
+   "evidence_ids": [
+    "E-076"
+   ]
+  },
+  {
+   "text": "The 10:27-10:33 tick gap may be a real feed pause, but it begins after the 10:20-10:25 onset and does not explain why price_age_s started rising at 10:20-10:25.",
+   "evidence_ids": [
+    "E-077"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Which stage actually froze: apply-to-price step, publish path, or the price_age_s computation. Not separable from current data.",
+  "Whether all symbols or only a subset are stale; no per-symbol view exists.",
+  "Exact onset time within 10:19-10:25 UTC; the 10:23-10:24 estimate comes from the rise pattern.",
+  "The 10:27-10:33 tick gap is unexplained.",
+  "Upstream feed source and vendor or credential state are unknown; the change log cannot see credential expiry, scheduled jobs or vendor-side changes.",
+  "What orchestrator, llm-gateway and redis-cache actually returned to users was not verified; no quote-key age or TTL data was available.",
+  "Logs after 10:35 were not checked, so it is unknown whether ticks resumed.",
+  "Tool-call budgets were exhausted in several passes, so some hops were not examined.",
+  "The broker-gateway 09:52 deploy was judged unrelated from its note and the dependency graph only, not from the diff (assumption).",
+  "No quote-specific freshness data for redis-cache: no per-key TTL, quote-key hit/miss, or age metric was available, so I could not confirm whether cached quotes are stale.",
+  "No orchestrator or llm-gateway freshness metrics were queried, so I could not check what was returned to users or whether the stale value passed through unchanged.",
+  "No tick-rate or feed-ingest metric was found for market-data, so I could not tell whether the upstream feed stopped or market-data stopped processing it.",
+  "Per-symbol data was not available, so I cannot say whether all symbols are stale or only a subset.",
+  "Metrics were only available at 5-minute resolution, so the exact onset within 10:20–10:25 is unknown.",
+  "Log searches were narrow (WARN level, plus 'quote' for orchestrator). INFO/DEBUG lines, and any logs from redis-cache, llm-gateway and the feed source, were not checked, so silence is not proof of health.",
+  "Clock skew across hosts was not assessed.",
+  "Tool-call budget was exhausted after five calls, so the remaining hops were not examined.",
+  "No point series was requested for market-data price_age_s, so the onset time of staleness is unknown and cannot be compared with the ten minutes before and after it.",
+  "The rabbitmq summary returned no queue-level metrics (depth, consumers, unacked, redeliveries, dead-letter counts) for portfolio-updates, inbound-msgs or outbound-msgs, so queue health is unverified.",
+  "redis-cache, portfolio-svc, portfolio-consumer, orchestrator and llm-gateway were not queried, so cache write failures, cache-hit or repeated-response patterns, serialization errors and silence in those services are unverified.",
+  "The 5-call budget was used up on the first pass, so market-data and broker-gateway ERROR logs, and the time-series for err_rate and latency, were not pulled.",
+  "Absence of market-data WARN logs is not proof of health; it only means no WARN-or-higher lines were returned for that window.",
+  "get_dependencies returned only callers for market-data and redis-cache. Their callees, upstream feed vendors and queue bindings are unknown, so an external data-source change could not be checked.",
+  "broker-gateway, portfolio-consumer, llm-gateway and postgres were not queried for dependencies, so the 09:52 broker-gateway deploy cannot be linked to the price path.",
+  "The change tool records only what is logged. Scheduled jobs, manual secret rotations and vendor-side feed changes may not be recorded, so their absence is not proof they did not happen.",
+  "Change records are checked only from 08:30 UTC, which is inside the requested window. Changes before that were not checked.",
+  "get_dependencies was not called for broker-gateway, order-router, portfolio-svc, llm-gateway, postgres or msg-delivery, so the rest of the quote path and the postgres sharing are unverified.",
+  "No service was found producing portfolio-updates, so the producer side of that queue is unknown.",
+  "The graph has no TTL or cache-policy data, so caching behaviour on the quote path is unknown.",
+  "The 4-call budget was used on the four services above, so no further topology lookups were made.",
+  "No past incident on market-data feed disconnects or stalled portfolio-updates consumers was returned, so those hypotheses have no historical comparison.",
+  "Search results give no detection signals or time-to-detect for INC-0412, so the hint about how long detection took cannot be filled in.",
+  "Each query returned at most one relevant hit with no truncation, so the incident history may be sparse. Other queries (for example, market-data or broker-gateway quote staleness) were not tried because the call budget was used up.",
+  "No current-incident telemetry was checked here, so none of these historical matches have been tested against 2026-03-20 data.",
+  "No tick-count, ingest-rate, subscription, reconnect or disconnect metric or log line exists for market-data in the window, so the feed-stall hypothesis cannot be checked directly.",
+  "There is no per-symbol view, so a partial stall cannot be told apart from a total one.",
+  "price_age_s was only pulled at 1-minute resolution for 10:15-10:30, so onset at 10:23-10:24 is an estimate from the rise pattern, not a measured point.",
+  "The logs do not say which symbols or how many ticks each batch carried, so 'price tick batch published' cannot be checked for content or freshness.",
+  "The method used to compute price_age_s is not documented in the results, so the metric-bug explanation cannot be ruled in or out.",
+  "Upstream feed source health (the external price feed or its connection) was not queried, so the cause upstream of market-data is unverified.",
+  "No set/get split or keyspace-size metric exists for redis-cache, so I could not test whether quote keys are being rewritten.",
+  "No quote-key age, TTL or per-key metric was available, so a non-expiring TTL or stuck writer is unverified.",
+  "orchestrator and llm-gateway INFO logs contain no quote or tool-result content, so I could not see which price values or timestamps were returned to users.",
+  "No direct comparison was possible between the returned quote timestamp and market-data output at the same moment.",
+  "The orchestrator 'quote' and llm-gateway 'tool' filters returned zero lines. That may mean these services do not log results at INFO, not that they are healthy.",
+  "Tool-call budget was exhausted (five calls), so no further drill-down was possible.",
+  "Vendor or feed-side notices and maintenance windows are not visible to any tool, so a vendor outage or session timeout could not be confirmed or ruled out.",
+  "Scheduled jobs and cron entries are not exposed by get_changes or get_dependencies, so they could not be checked.",
+  "Credential and secret rotation or expiry is not in the change log, so its absence is weak evidence only.",
+  "get_dependencies lists only market-data's caller and no callees, so the upstream price feed or ingest source is unidentified.",
+  "The past-incident search returned only INC-0388, which is unrelated. No earlier-day check of the 10:20 onset was possible, so the time-of-day recurrence hypothesis is untested.",
+  "Call budget (about 4) was reached, so no further narrowing was attempted.",
+  "No tick-rate, per-symbol last-tick-time or feed-connection metric exists for market-data, so ingestion cannot be checked on the metric side.",
+  "Log queries were limited to 10:10-10:35 UTC and matched only the substrings 'tick' and 'feed'. Nothing after 10:35 was checked, so it is unknown whether ticks resumed.",
+  "No feed connect, disconnect or error line appeared for 'feed' at DEBUG level in the window. Absence of such lines is not proof of a healthy connection.",
+  "No per-symbol detail was returned, so it cannot be shown whether all symbols or only some went stale.",
+  "The DEBUG-level query returned only INFO lines, so no DEBUG detail on the tick path was available.",
+  "price_age_s has no symbol dimension in query_metrics, so per-symbol age cannot be read from the metric.",
+  "market-data logs contain no symbol-level or price_age lines in 10:00–11:30 UTC, so the logs cannot identify affected symbols.",
+  "The list of tracked symbols was not available to compare against, so coverage (all versus subset) is unknown.",
+  "Other per-symbol sources (e.g. redis-cache keys or the orchestrator quote responses) were not queried within the call budget."
+ ],
+ "actions": [
+  {
+   "text": "Restart or redeploy the market-data tick-apply or ingest component (rolling restart of market-data) and watch price_age_s drop back to about 2 s.",
+   "rationale": "Prices are frozen while the process is healthy, so a restart is the quickest way to restore fresh quotes. Recovery after restart would also support H4. Restarting the service fully may be needed, as the exact stuck component is unknown.",
+   "evidence_ids": [
+    "E-004",
+    "E-071",
+    "E-074",
+    "E-003"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Before or while restarting, capture market-data state: compare the last tick timestamp per symbol with price_age_s, and check the feed session and credential expiry records.",
+   "rationale": "The data cannot separate a stuck apply step, a metric bug, a partial symbol stall and a feed or credential issue, so this check decides between them and keeps evidence for the postmortem.",
+   "evidence_ids": [
+    "E-049",
+    "E-067",
+    "E-078"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Add an alert on market-data price_age_s (for example above 30-60 s during market hours) and add tick-rate, last-applied-tick time and per-symbol freshness metrics.",
+   "rationale": "The staleness went undetected because err_rate, latency and rps stayed flat and nothing was logged at WARN, and no ingest metric exists.",
+   "evidence_ids": [
+    "E-046",
+    "E-047",
+    "E-006",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Log warnings when ticks are published without any price change, or when applied-tick age exceeds a threshold, and make the heartbeat check reflect tick freshness.",
+   "rationale": "Heartbeats reported ok and batches were published while prices were frozen, so current health signals are misleading.",
+   "evidence_ids": [
+    "E-073",
+    "E-074",
+    "E-072",
+    "E-076"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Make orchestrator reject or flag quotes older than a freshness limit, and have the assistant say the data is delayed instead of quoting it.",
+   "rationale": "Users received stale prices through orchestrator, which calls market-data, with no safeguard on the path.",
+   "evidence_ids": [
+    "E-024",
+    "E-002",
+    "E-003"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 39,
+  "tool_attempts": 39,
+  "llm_calls": 30,
+  "tokens_in": 197836,
+  "tokens_out": 51054,
+  "rounds": 2,
+  "elapsed_s": 263.3
+ },
+ "dropped_claims": 0
+}

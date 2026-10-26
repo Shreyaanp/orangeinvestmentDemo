@@ -1,0 +1,573 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence; stopped early: time limit 420.0s reached",
+ "summary": "The evidence points to aa-sync connection pool saturation as the most probable root cause. holdings_snapshot queries in aa-sync slowed progressively from 12:50 (171 ms rising to about 636 ms) while request rate stayed flat. Each request therefore held a pool connection longer, and pool_in_use hit its ceiling by 12:55. portfolio-consumer then saw 503s and growing timeouts, handlers failed and messages were redelivered on portfolio-updates, which is the likely reason balances are stale. Why the holdings_snapshot queries slowed is not established: Postgres server-wide metrics are flat, so a Postgres-side cause (H3) is possible but weakly supported, and the slowness may instead be client-side or specific to one table. The auth-kyc, web-app, market-data and orchestrator deploys, portfolio-svc, broker-gateway, redis-cache and rabbitmq do not fit the timeline.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "aa-sync holdings_snapshot queries became progressively slower from 12:50, so each request held a pool connection longer. With rps flat, the pool filled by 12:55 and requests queued. aa-sync then returned slow or failed responses to portfolio-consumer, which failed handlers, caused redeliveries on portfolio-updates, and left balances stale.",
+   "component": "aa-sync",
+   "cause_type": "slow_query_connection_pool_saturation",
+   "score": 4.1,
+   "confidence": 0.672,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "aa-sync latency roughly doubled and pool_in_use stepped up in the same 12:50 bucket, while rps stayed flat. This points to longer per-request hold time rather than more traffic.",
+     "evidence_ids": [
+      "E-041",
+      "E-043",
+      "E-039"
+     ]
+    },
+    {
+     "text": "The first holdings_snapshot slow-query WARN is at 12:50:17 and durations grow steadily (171 to 636 ms). They match the latency_ms bucket values, which points to query time driving latency.",
+     "evidence_ids": [
+      "E-046",
+      "E-047"
+     ]
+    },
+    {
+     "text": "pool_in_use reached 100 at 12:55 and stayed pinned, and the first logged pool-exhaustion ERROR followed at 12:56:08 with requests queued. CPU throttling was low, so CPU starvation does not explain the slowdown.",
+     "evidence_ids": [
+      "E-080",
+      "E-042",
+      "E-003",
+      "E-063"
+     ]
+    },
+    {
+     "text": "The downstream picture is consistent: portfolio-consumer synchronously calls aa-sync, and its first redelivery (12:51:47), 503 (12:51:50) and growing timeouts (241 ms to 746 ms) follow aa-sync's slowdown. Its error rate tracks aa-sync's. The causal link is inferred from ordering. It is likely, not shown, that consumer handler failures caused the redeliveries.",
+     "evidence_ids": [
+      "E-009",
+      "E-010",
+      "E-011",
+      "E-012",
+      "E-004",
+      "E-032",
+      "E-021"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "aa-sync logs show no 503 or timeout lines and no ERROR before 12:56:08, although the err_rate metric stepped up at the 12:50 bucket. The metric and logs disagree. This may be bucket labelling or unlogged 5xx responses, and it is unverified.",
+     "evidence_ids": [
+      "E-055",
+      "E-092",
+      "E-087",
+      "E-096"
+     ]
+    },
+    {
+     "text": "The logged pool limit moves between 96 and 106 and the pool_max metric is noisy. The meaning of the 'NN/MM' log fields is not labelled, so the pool-limit reading is uncertain. Whether the slow queries cause the saturation (as opposed to a coincident effect) rests on ordering and matching numbers within 1-minute buckets, not on direct proof.",
+     "evidence_ids": [
+      "E-058",
+      "E-060",
+      "E-097",
+      "E-050"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H3",
+   "statement": "The postgres holdings_snapshot table or query path degraded at about 12:50, for example through a heavy batch job, lock contention or a plan regression. This is the origin of aa-sync's slow queries, so it is the root cause of the pool exhaustion and the consumer failures.",
+   "component": "postgres",
+   "cause_type": "database_query_degradation",
+   "score": 2.25,
+   "confidence": 0.529,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "aa-sync depends on postgres (weight 0.7) and the slow queries are on holdings_snapshot, so a database-side cause would produce this pattern. It cannot be ruled out because server-wide averages can hide one slow table or plan.",
+     "evidence_ids": [
+      "E-031",
+      "E-047",
+      "E-106"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Postgres latency, slow_queries, pool_waiting, replication lag and error rate are flat with no step at 12:50, and no lock-wait WARNs were logged. Postgres logs have no holdings_snapshot lines in 12:45-12:57. This conflicts with aa-sync's 14 slow-query WARNs on that table.",
+     "evidence_ids": [
+      "E-098",
+      "E-099",
+      "E-100",
+      "E-125",
+      "E-131"
+     ]
+    },
+    {
+     "text": "The slowness may be client-side (connection acquisition, network or hold time) or confined to one table or query. This would explain flat server metrics but is unverified. No lock or per-query metrics were available.",
+     "evidence_ids": [
+      "E-128",
+      "E-129",
+      "E-105",
+      "E-138"
+     ]
+    },
+    {
+     "text": "A consent refresh at 12:49:25 could have added load, but similar refreshes earlier caused no slowdown and no job start or end log exists. It is not a supported trigger.",
+     "evidence_ids": [
+      "E-108",
+      "E-110",
+      "E-116"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 3,
+   "hypothesis_id": "H2",
+   "statement": "A slow or failing external account-aggregator upstream held aa-sync connections open, so the pool saturated as a consequence and the consumer saw timeouts.",
+   "component": "aa-sync",
+   "cause_type": "slow_external_upstream",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "aa-sync's topology shows no external account-aggregator edge, and aa-sync logs no upstream or timeout WARNs. Nothing positive supports a slow external upstream. Only a weak historical match (INC-0388, a bank-side outage) exists.",
+     "evidence_ids": [
+      "E-070",
+      "E-091",
+      "E-092",
+      "E-072"
+     ]
+    },
+    {
+     "text": "The tools did not cover provider maintenance, quota or credential events, so this is not fully excluded, but there is no evidence for it.",
+     "evidence_ids": [
+      "E-074",
+      "E-073"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "The earliest aa-sync ERROR in the window is pool exhaustion at 12:56:08. Requests were queueing, and the in-use count exceeded the pool limit at times (for example 100/106).",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "portfolio-consumer err_rate rose from 12:50, tracking aa-sync and reaching 0.236 at 12:55.",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-consumer first reports redelivered messages on portfolio-updates at 12:51:47, the earliest onset signal in the logs",
+   "evidence_ids": [
+    "E-009"
+   ]
+  },
+  {
+   "text": "First aa-sync call failure in the consumer logs, three seconds after the first redelivery",
+   "evidence_ids": [
+    "E-010"
+   ]
+  },
+  {
+   "text": "aa-sync upstream timeouts begin at 241ms and grow over the window",
+   "evidence_ids": [
+    "E-011"
+   ]
+  },
+  {
+   "text": "Latest visible aa-sync timeout (log output is capped), showing the timeout value has grown to 746ms by 13:06",
+   "evidence_ids": [
+    "E-012"
+   ]
+  },
+  {
+   "text": "aa-sync calls postgres (0.7), is called by portfolio-consumer (0.8), and publishes to portfolio-updates.",
+   "evidence_ids": [
+    "E-031"
+   ]
+  },
+  {
+   "text": "portfolio-consumer sync-calls aa-sync (weight 0.8) and consumes from portfolio-updates.",
+   "evidence_ids": [
+    "E-032"
+   ]
+  },
+  {
+   "text": "rps was flat across the window and did not spike: min 33.324, max 36.791, mean 34.906, so there was no request-volume increase before the pool filled.",
+   "evidence_ids": [
+    "E-039"
+   ]
+  },
+  {
+   "text": "pool_in_use was at baseline before onset (about 22) and stepped up in the 12:50 bucket.",
+   "evidence_ids": [
+    "E-041"
+   ]
+  },
+  {
+   "text": "pool_in_use reached its maximum of 100.0 at 12:55 and stayed there through 13:14.",
+   "evidence_ids": [
+    "E-042"
+   ]
+  },
+  {
+   "text": "latency_ms roughly doubled in the 12:50 bucket, at the same bucket as the pool step, while rps stayed flat.",
+   "evidence_ids": [
+    "E-043"
+   ]
+  },
+  {
+   "text": "The first aa-sync slow-query WARN in the window is at 12:50:17, in the same minute as the latency and pool step. Lines from 12:40 to 12:49 contain no slow-query warnings.",
+   "evidence_ids": [
+    "E-046"
+   ]
+  },
+  {
+   "text": "The holdings_snapshot slow-query durations rise over time (171, 241, 313, 400, 482, 564, 636 ms, one per minute). They match the latency_ms bucket values (170.767, 241.285, 313.303, 400.19, 482.172, 564.038, 635.79), which points to downstream query time driving latency.",
+   "evidence_ids": [
+    "E-047"
+   ]
+  },
+  {
+   "text": "aa-sync logs show no ERROR line before 12:56:08Z in the 12:45-12:57 window. The result was complete (not truncated), which conflicts with the err_rate step at the 12:50 bucket. Either errors are not logged or the metric bucket is mislabelled.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "Pool limit discrepancy: a later log line shows a denominator of 106, and an earlier one shows 96. The logged limit moves around rather than staying fixed.",
+   "evidence_ids": [
+    "E-058"
+   ]
+  },
+  {
+   "text": "pool_max metric summary: mean 99.79, min 95.179, max 105.769. This is the metric side of the pool-limit discrepancy with the logged 96 to 106 range.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "CPU throttling stayed low (max 3.16%), which weakens CPU starvation as the cause of the slowdown.",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "aa-sync's topology lists only postgres as a synchronous callee, portfolio-consumer as its caller, and portfolio-updates as a publish target. No external provider or broker API edge appears.",
+   "evidence_ids": [
+    "E-070"
+   ]
+  },
+  {
+   "text": "Past incident INC-0388 (historical, not confirmed for this incident) involved account-aggregator fetch failures for one bank, attributed to bank-side downtime. It is the only AA or broker-maintenance-type match, and it dates from 2025-12-09.",
+   "evidence_ids": [
+    "E-072"
+   ]
+  },
+  {
+   "text": "aa-sync pool_in_use reaches the 100.0 ceiling at 12:55, about a minute before the first logged aa-sync ERROR at 12:56:08 (E-003).",
+   "evidence_ids": [
+    "E-080"
+   ]
+  },
+  {
+   "text": "aa-sync err_rate was already elevated in the 12:50 bucket (0.135), up from 0.004 at 12:45, so the metric rise precedes the first logged ERROR.",
+   "evidence_ids": [
+    "E-087"
+   ]
+  },
+  {
+   "text": "No aa-sync WARN lines containing 'upstream' exist from 12:45 to 14:00, so aa-sync logs do not name an upstream target.",
+   "evidence_ids": [
+    "E-091"
+   ]
+  },
+  {
+   "text": "No aa-sync WARN lines containing 'timeout' exist from 12:45 to 13:00. aa-sync itself logs no timeouts in that window, which weakens the view that aa-sync is timing out on an upstream call.",
+   "evidence_ids": [
+    "E-092"
+   ]
+  },
+  {
+   "text": "postgres query latency (latency_ms) was flat across the window: the summary shows a narrow range and the 12:50 bucket is ordinary, so there is no step at onset.",
+   "evidence_ids": [
+    "E-098"
+   ]
+  },
+  {
+   "text": "postgres slow_queries stayed near 1 per minute through the 12:50 onset bucket, with no rise.",
+   "evidence_ids": [
+    "E-099"
+   ]
+  },
+  {
+   "text": "postgres pool_waiting was zero in every minute from 12:40 to 13:09, so there is no pool queueing on the postgres side.",
+   "evidence_ids": [
+    "E-100"
+   ]
+  },
+  {
+   "text": "The closest scheduled refresh before the first slow query is at 12:49:25, about 52 seconds earlier.",
+   "evidence_ids": [
+    "E-108"
+   ]
+  },
+  {
+   "text": "Consent refresh scheduled WARNs occur at many times before the slowdown, including 12:04 and 12:20 to 12:28, when no slowdown occurs. Their timing is irregular and not a fixed batch cadence.",
+   "evidence_ids": [
+    "E-110"
+   ]
+  },
+  {
+   "text": "Postgres logs contain no WARN lines mentioning holdings_snapshot from 12:45 to 12:57. This conflicts with aa-sync's 14 slow-query WARNs on the same table in that period.",
+   "evidence_ids": [
+    "E-125"
+   ]
+  },
+  {
+   "text": "Postgres has no WARN lines containing 'lock' in 12:45-12:57, so no lock-wait warnings were logged.",
+   "evidence_ids": [
+    "E-131"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The aa-sync HTTP 503s and growing timeouts are the root of the portfolio-consumer slowdown, and the redeliveries follow from consumer handler failures. This is inferred from ordering and has not been checked against aa-sync's own logs or metrics.",
+   "evidence_ids": [
+    "E-021"
+   ]
+  },
+  {
+   "text": "The likely sequence is a slow holdings_snapshot query lengthening connection hold time, so the pool fills, with requests queuing. This is inferred from ordering and matching numbers, not confirmed. It is also unverified whether the 12:50 latency and pool moves happened in the same second.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "aa-sync's external AA and broker API calls are probably made directly, outside the service topology, which is why no external edges appear. This is not verified.",
+   "evidence_ids": [
+    "E-073"
+   ]
+  },
+  {
+   "text": "Absence of a change record or past incident does not rule out a scheduled job, credential rotation, quota change or provider maintenance event at 12:45 to 12:50. The tools do not cover those event types.",
+   "evidence_ids": [
+    "E-074"
+   ]
+  },
+  {
+   "text": "The 12:50 bucket probably covers 12:50 to 12:55 (labelled by start time). The err_rate rise can therefore come about 6 minutes before the first logged ERROR without contradiction, and err_rate may count failures that are not logged at ERROR level, such as returned 5xx responses.",
+   "evidence_ids": [
+    "E-096"
+   ]
+  },
+  {
+   "text": "In the 'NN/MM connections in use' message, the first number is fixed at 100 and the second varies from 96 to 106. This matches the pool_max range (95 to 106), so it is probably in-use versus limit. The log does not label the fields, so the claim that in-use exceeded the limit is not established.",
+   "evidence_ids": [
+    "E-097"
+   ]
+  },
+  {
+   "text": "The aa-sync holdings_snapshot slowdown probably sits outside postgres's server-level aggregates: on the aa-sync side (client, network or connection hold time) or in a query-specific load that averages out in server-wide metrics. This is inferred from the flat postgres metrics and has not been verified.",
+   "evidence_ids": [
+    "E-105"
+   ]
+  },
+  {
+   "text": "H3 (postgres degradation at about 12:50) is weakened as a server-wide cause. It is not fully ruled out, because server-wide averages can hide one slow table or query plan.",
+   "evidence_ids": [
+    "E-106"
+   ]
+  },
+  {
+   "text": "A scheduled consent refresh may have started just before onset (12:49:25) and may have added holdings_snapshot load. The 12:40:16 refresh without a slowdown, and the lack of any job start or end log, weaken this as the trigger. It remains unconfirmed.",
+   "evidence_ids": [
+    "E-116"
+   ]
+  },
+  {
+   "text": "The aa-sync slow-query durations may be measured at the client, including connection acquisition or network time, which would explain why the Postgres server metrics stay flat. This has not been verified.",
+   "evidence_ids": [
+    "E-128"
+   ]
+  },
+  {
+   "text": "The aa-sync slow queries on holdings_snapshot and the flat Postgres metrics may come from different scopes: the Postgres metrics may be aggregated across all queries and databases, which could hide a slowdown on one table. This has not been verified.",
+   "evidence_ids": [
+    "E-129"
+   ]
+  },
+  {
+   "text": "Flat Postgres latency, zero pool_waiting and no lock WARNs suggest the database is not the bottleneck, which weakens the idea that aa-sync is slow because Postgres is slow. This is inference from summaries only.",
+   "evidence_ids": [
+    "E-138"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Why holdings_snapshot queries slowed at 12:50 remains unexplained: Postgres server-side metrics are flat and Postgres logs show no matching slow queries, so a client-side or table-specific cause is not excluded.",
+  "The aa-sync err_rate step at the 12:50 bucket has no matching ERROR or 503 log line before 12:56:08. Bucket labelling and unlogged errors are both unverified.",
+  "The pool limit is unclear: logs show 96-106 and the pool_max metric is noisy. The meaning of the 'NN/MM' log fields is not labelled.",
+  "The consumer's 503 versus timeout behaviour is unverified: no trace IDs exist, clock skew was not assessed, and aa-sync logs show no 503s.",
+  "portfolio-updates queue depth, redeliveries and DLQ were not checked, and portfolio-consumer logs after 13:06 were not seen. The aa-sync ERROR log was truncated (320 matches, 200 returned).",
+  "Scheduled jobs, credential or quota changes and provider maintenance were not covered by the tools. A coincident consent refresh at 12:49:25 is unconfirmed as a trigger.",
+  "Several tool calls were truncated, partial or returned invalid input, and call budgets were exhausted. The incident history index is sparse and the past incidents (INC-0412, INC-0388) are not shown to apply.",
+  "No previous-day or previous-week baseline was queried, so the 'sudden vs gradual' call and the 'abnormal' call rest only on the 12:00 to 12:45 window.",
+  "aa-sync latency_ms and rps were only summarised, not charted over time, so I cannot say whether latency rose before the error rate.",
+  "Sync errors were not split by type, status code or upstream target. The log query used only the ERROR level and a single pool-exhaustion message.",
+  "The aa-sync ERROR log was truncated (100 of 170 lines, up to 13:15:59) and limited to 13:30. Later errors and any other error types were not seen.",
+  "No portfolio-consumer or portfolio-svc logs were queried, so the consumer's own errors and the stale-balance path are unverified.",
+  "Metric summaries show pool_max around 99.79 while logs show limits of 98 to 106. The two sources disagree on the effective pool limit, which is unexplained.",
+  "No queue metrics for portfolio-updates were checked, so it is unknown whether updates were backing up or silently dropped.",
+  "No portfolio-updates queue depth, publish/consume rate, consumer count, unacked, redelivery or DLQ metrics were returned. The rabbitmq summary has only err_rate, latency_ms, memory_pct and rps (totals), so the queue's backlog is unknown.",
+  "inbound-msgs and outbound-msgs queues were not checked, so it is not known whether the problem is isolated to portfolio-updates.",
+  "portfolio-consumer log results were truncated (482 total, 100 returned, oldest first). Coverage stops at 13:06:09, and 13:06 to 14:00 was not seen.",
+  "portfolio-consumer metrics were summary-only (no points), so the onset is pinned by logs at 12:51:47, not by a metric change point.",
+  "redis-cache hit_ratio max is 1.012, which is above 1 and suggests a metric artifact. No TTL, stale-key or balance-cache-key checks were done.",
+  "aa-sync was not queried (logs or metrics), so the callee's health and whether it caused the 503s is unverified.",
+  "Postgres lock waits, connection counts and per-query slow logs were not directly queried; only the summary metrics above were available.",
+  "Clock skew was not assessed. The consumer errors appear after aa-sync timeouts started, so the ordering is consistent with aa-sync as the cause.",
+  "get_changes filters to deploy, config, migration and flag only. Scheduled jobs, secret and credential rotations, certificate rotations, rate-limit or quota changes, and broker or account-aggregator provider maintenance were not covered by any tool I called.",
+  "No get_dependencies call was made, so I could not confirm whether auth-kyc connects to aa-sync, portfolio-svc, or portfolio-consumer.",
+  "No change records were found for the hinted services, which I read as a true absence rather than missing data, but this depends on the change feed being complete for those services.",
+  "search_incidents returned only two past incidents, and neither is confirmed as relevant to this incident.",
+  "broker-gateway, market-data, auth-kyc, redis-cache, postgres, rabbitmq and order-router were not queried, so their edges are unknown. The auth-kyc edge to the balance path is therefore unverified.",
+  "No retry, timeout, connection-pool, auth-token or rate-limit configuration was retrieved, and external account-aggregator and broker API status was not checked.",
+  "The change query returned no config, migration or flag records. This may mean none occurred, or that the store does not record them; this cannot be verified from the tool output.",
+  "search_incidents was not run, and the team's call budget (about 4) was used up, so no past-incident hypotheses were tested.",
+  "Search results have null source and url fields, so the INC-0412 and INC-0431 details could not be checked against primary postmortems.",
+  "Only two incidents were returned across four queries (totals of 1 to 2, not truncated), which suggests the index is sparse or the keywords missed relevant entries. Terms such as 'aa-sync', 'broker-gateway', 'token', 'rate limit' and 'consumer lag' were tried but gave no matches.",
+  "The past-incident search does not show whether redis-cache or portfolio-svc changed around 12:55 UTC on 2026-03-14. That needs the change-history check, which is outside this search-only task.",
+  "Incident dates were given as day-level only, so no UTC timestamps were recorded for the past incidents.",
+  "pool_waiting is not a valid metric, so pool queueing could not be charted. The pool_max and cpu_throttle_pct metrics were not queried, so the pool limit (log says 99, while pool_in_use max is 100.0) is unverified.",
+  "Log lines have no upstream-target field. Grouping by upstream target was not possible; the only downstream named is holdings_snapshot, with no host or service identified.",
+  "At 1-minute resolution, the order of latency_ms and pool_in_use within the 12:50 bucket cannot be resolved.",
+  "Logs before 12:40 were not pulled, so whether slow queries started earlier is unknown.",
+  "Postgres-side query metrics for holdings_snapshot were not pulled. The postgres summary (E-019: no pool waiting, slow queries near 1) conflicts with aa-sync's own slow-query warnings, and this is unresolved.",
+  "aa-sync logs in 12:40-12:57 contain no HTTP 503 or upstream timeout lines, which does not support E-021's claim that aa-sync 503s drive the consumer slowdown. The consumer-side claims are not checked here.",
+  "E-003's '100/106' example does not appear in the pulled logs, which show '100/99'.",
+  "The query used level INFO, which includes WARN and ERROR, and it returned 45 lines with no truncation.",
+  "No aa-sync 503 lines were found in the logs, so the first aa-sync 503 could not be located. The aa-sync slow-query line is the earliest slow-request signal found.",
+  "No request IDs or trace IDs appear in the aa-sync results, so the consumer's 12:51:50 event cannot be matched to aa-sync requests. Clock skew between hosts was not assessed.",
+  "The err_rate step at the 12:50 bucket has no matching ERROR or 503 log line before 12:56:08Z. The metric and logs disagree, and the cause (unlogged errors or bucket labelling) is unverified.",
+  "T7-02 is truncated (total 320) and ends at 13:35:45Z, so later pool events were not seen. No aa-sync logs after 13:35:45Z were fetched.",
+  "The pool_max metric (T7-04) ends at 13:04 and does not include the 106 denominator logged at 13:06:00Z, so the two sources cannot be aligned exactly at that point.",
+  "The restart and resize checks were text-matched at DEBUG level only. Config or deploy changes could be recorded elsewhere, so the absence is not proof that no change happened.",
+  "latency_ms was not fetched as a time series, so it could not be aligned with the slow-query log timeline.",
+  "Only the aa-sync side was investigated. The consumer's 'first aa-sync call failure' is taken from established claims and was not checked against consumer logs in this session.",
+  "Scheduled jobs, cron, batch syncs, credential or certificate rotations, rate-limit or quota changes, and external AA or broker maintenance or status events are not covered by get_changes or get_dependencies. The 12:45 to 12:50 window could not be checked for them.",
+  "get_dependencies showed no edges from aa-sync to external AA or broker APIs, so the external dependency map is incomplete. Those edges need a source such as service config or an egress inventory.",
+  "I did not query get_changes for the 12:25 auth-kyc deploy because my window started at 12:30. That deploy is already recorded in the team's claims (E-022), so it is not re-verified here.",
+  "search_incidents results are historical and only partially relevant. INC-0388 is a different bank-side cause and does not establish a current provider problem.",
+  "Metrics are 1-minute buckets, so the order of latency and pool rise inside the 12:50 minute cannot be resolved.",
+  "The aa-sync error-rate series was not part of this query, so the 12:50 error step (E-001) is taken from the existing claims, not re-checked here.",
+  "The gap between pool saturation at 12:55 and the first logged aa-sync ERROR at 12:56:08 is not explained; it may be a log gap or queueing before errors are emitted. Verifying it needs aa-sync logs for 12:50–12:57.",
+  "pool_in_use units and ceiling are not documented in the result, so the meaning of 100.0 is inferred.",
+  "No per-upstream or per-endpoint breakdown was queried, so whether latency comes from a slow upstream or from the service itself is not shown here.",
+  "ERROR results are truncated after 13:35:45 (120 of 320 matches not seen), so the type breakdown after that point is unverified.",
+  "aa-sync ERROR lines carry no upstream or dependency field, so the upstream target cannot be identified from them.",
+  "No unfiltered WARN or INFO query for aa-sync 12:45 to 12:56 was run, so any pool-wait or slowdown precursors before 12:56:08 are not checked.",
+  "The 'NN/MM' field meaning is not labelled in the logs, so the pool-limit reading is inferred.",
+  "No per-bucket metric points for rps, latency_ms, or pool_in_use were requested, so the timing of the saturation relative to 12:50 is not shown.",
+  "aa-sync's outbound calls (for example to postgres, per the topology) were not examined, so the cause of pool saturation is not established. Team-reported postgres pool-waiting data (E-019) was not re-verified here.",
+  "The 12:50 metric step has no matching aa-sync log in 12:50 to 12:56, so the lag between metric and log is unexplained.",
+  "Active connections, connections from aa-sync, lock waits, CPU and IO are not in the postgres metric list returned by the tool (only err_rate, latency_ms, pool_waiting, replication_lag_s, rps and slow_queries exist), so they could not be checked per minute.",
+  "replication_lag_s and rps were returned as summaries only; no per-minute points were requested, so a per-minute step there is unverified.",
+  "postgres metrics are server-level aggregates with no per-table or per-statement breakdown, so holdings_snapshot timings cannot be isolated from postgres data.",
+  "The postgres slow-query log lines carry a bare number with no statement text or unit, so they cannot be matched to holdings_snapshot. Logging may also be sampled, which I could not verify.",
+  "No postgres data was checked before 12:40, so the pre-onset baseline comes only from the 12:40-12:49 minutes in this window.",
+  "No further queries were made, since the call budget was used.",
+  "The 12:50:17 slow-query line itself is not in T12-02, which ends at 12:50:17. I have not confirmed whether the end bound is inclusive.",
+  "The logs show no job name, job start or job completion line for consent refreshes, so I cannot tell what the refresh does or how long it runs.",
+  "The slow holdings_snapshot WARNs carry no consent ID or trace ID, so I cannot link any slow query to a specific refresh.",
+  "The count of 4 refresh WARNs in E-049 is consistent with 12:40:16, 12:49:25, 12:52:42 and 12:55:15 (T12-03), but I did not query that exact window directly.",
+  "Clock skew between aa-sync and portfolio-consumer has not been assessed.",
+  "No postgres metric for active connections exists in the discovered metric list (err_rate, latency_ms, pool_waiting, replication_lag_s, rps, slow_queries), so active connections could not be checked.",
+  "No lock-wait metric or lock-wait log exists for postgres, so lock waits could not be checked.",
+  "Per-query latency is not available at the Postgres server. The postgres latency_ms metric is aggregated and does not split out holdings_snapshot, so per-query latency could not be compared directly with aa-sync's durations.",
+  "The postgres WARN query for holdings_snapshot returned zero lines, which is an absence in logs rather than evidence that the queries were fast. The server may not log slow queries at WARN, or the aa-sync timings may come from the client side.",
+  "I did not check the pool_in_use or pool_max relationship with postgres connections, because that belongs to the aa-sync side of the investigation.",
+  "pg_stat_activity was not available through query_logs or query_metrics, so connection states, waiting sessions and lock holders for holdings_snapshot cannot be checked.",
+  "No Postgres lock metric exists in the summary, so lock contention is only ruled out by the absence of lock-related WARN lines.",
+  "The 'slow query logged' lines do not include the table name or duration, so they cannot be matched to holdings_snapshot or to aa-sync's WARNs.",
+  "Postgres metrics were requested as summaries only (no points), so per-minute timing around 12:50 could not be checked.",
+  "portfolio-svc was queried at WARN level only, so INFO-level latency or errors were not checked. Its latency and error metrics from other tasks were not re-queried here.",
+  "Call budget (5) was used up, so I did not check other postgres clients directly (for example by querying aa-sync or the orchestrator for DB errors)."
+ ],
+ "actions": [
+  {
+   "text": "Relieve aa-sync pool pressure now. Restart or recycle aa-sync instances, or temporarily scale out or raise the pool limit if capacity on Postgres allows, and watch whether pool_in_use and latency recover.",
+   "rationale": "The pool has been pinned at 100 since 12:55 with requests queued, and traffic is flat. Freeing connections stops consumer 503s and timeouts. If the slow holdings_snapshot queries persist, the pool may refill, so treat this as mitigation only.",
+   "evidence_ids": [
+    "E-042",
+    "E-081",
+    "E-003",
+    "E-039"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check the consumer-to-aa-sync path: confirm consumer retries and redeliveries are not amplifying load on aa-sync, and check portfolio-updates queue depth, redeliveries and DLQ. Once aa-sync recovers, confirm the backlog drains so balances refresh.",
+   "rationale": "Redeliveries began at 12:51:47 and consumer errors stay high. The queue backlog and DLQ were never checked, so staleness may persist after aa-sync recovers.",
+   "evidence_ids": [
+    "E-009",
+    "E-013",
+    "E-016",
+    "E-021"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Find out why holdings_snapshot queries slowed at 12:50. Examine pg_stat_activity, lock waits, the query plan and table or index state for holdings_snapshot, and compare aa-sync's client-side query timing (including connection acquisition) with server-side timing.",
+   "rationale": "Server-wide Postgres metrics are flat while aa-sync reports growing query time. Table-level or client-side causes are untested, and this decides between H1 alone and H1 with H3.",
+   "evidence_ids": [
+    "E-047",
+    "E-098",
+    "E-129",
+    "E-128",
+    "E-137"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Check for events outside the change feed around 12:45-12:50: scheduled jobs or batch refreshes on holdings_snapshot, other Postgres clients, and any pool or config changes on aa-sync.",
+   "rationale": "No deploy, config, migration or flag change occurred before onset, and the change tools do not cover scheduled jobs. The trigger is still unknown.",
+   "evidence_ids": [
+    "E-069",
+    "E-025",
+    "E-074",
+    "E-116"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add alerting and instrumentation: alert on aa-sync pool utilisation and query latency, log 5xx responses and the pool-limit fields clearly, and add trace IDs across portfolio-consumer and aa-sync.",
+   "rationale": "The error metric preceded the first logged error by several minutes, the pool limit logging is ambiguous, and events could not be correlated across services.",
+   "evidence_ids": [
+    "E-055",
+    "E-097",
+    "E-068",
+    "E-087"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 65,
+  "tool_attempts": 65,
+  "llm_calls": 43,
+  "tokens_in": 430790,
+  "tokens_out": 103637,
+  "rounds": 3,
+  "elapsed_s": 518.2
+ },
+ "dropped_claims": 0
+}

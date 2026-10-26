@@ -1,0 +1,50 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "worker",
+      "cause_type": "concurrency_limit_config",
+      "description": "Someone set the worker Lambda's reserved concurrency to 1 from the console; one slot cannot keep up with ~24 messages/min at ~3s each, so SQS inbound backs up and replies wait minutes.",
+      "onset": "2026-10-22T09:41:00Z",
+      "decisive": [
+        {
+          "kind": "change",
+          "service": "worker",
+          "level": null,
+          "contains": "ct-7d3da4d",
+          "metric": null,
+          "min_value": null,
+          "failed_tool": false,
+          "start": "2026-10-22T09:41:00Z",
+          "end": "2026-10-22T10:30:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "worker",
+          "level": null,
+          "contains": "",
+          "metric": "throttles",
+          "min_value": 5.0,
+          "failed_tool": false,
+          "start": "2026-10-22T09:41:00Z",
+          "end": "2026-10-22T10:30:00Z"
+        },
+        {
+          "kind": "metric",
+          "service": "sqs-inbound",
+          "level": null,
+          "contains": "",
+          "metric": "oldest_age_s",
+          "min_value": 120.0,
+          "failed_tool": false,
+          "start": "2026-10-22T09:41:00Z",
+          "end": "2026-10-22T10:30:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "A worker deploy lands four minutes earlier; the real change is a console configuration change (CloudTrail), not in git and only visible with kinds=config."
+}

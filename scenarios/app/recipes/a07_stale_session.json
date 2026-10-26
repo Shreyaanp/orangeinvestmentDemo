@@ -1,0 +1,26 @@
+{
+  "id": "a07_stale_session",
+  "seed": 707,
+  "start": "2026-10-23T10:00:00Z",
+  "minutes": 90,
+  "incident_at_min": 70,
+  "incident_text": "Users say the portfolio value the bot quotes does not match the app; a few say it looks like yesterday's number. Since about 10:40 UTC. Latency actually looks better than usual.",
+  "changes": [
+    {"id": "ttl-day", "kind": "deploy", "service": "worker", "at_min": 38, "title": "perf: keep portfolio snapshots for a day to cut RDS load", "author": "vikram",
+     "edits": [{"path": "config/app.json", "find": "\"ttl_s\": 300", "replace": "\"ttl_s\": 86400"}]}
+  ],
+  "externals": [
+    {"id": "llm-wobble", "at_min": 20, "until_min": 30, "set": {"llm.latency_mult": 1.2}}
+  ],
+  "faults": [
+    {"id": "F1", "role": "primary", "cause": "ttl-day",
+     "truth": {"component": "worker", "cause_type": "stale_cache_config", "description": "A commit raised session.ttl_s from 300s to 86400s, so the worker answers balance questions from portfolio snapshots cached up to a day ago instead of fetching fresh values from RDS."},
+     "decisive": [
+       {"kind": "change", "service": "worker"},
+       {"kind": "code", "service": "worker", "contains": "config/app.json"},
+       {"kind": "conversation", "service": "worker", "contains": "portfolio snapshot from session cache"}
+     ]}
+  ],
+  "trap": "Everything looks healthier (fewer RDS queries, lower latency); there are no errors anywhere. Only the conversation context and the diff show it.",
+  "answerable": true
+}

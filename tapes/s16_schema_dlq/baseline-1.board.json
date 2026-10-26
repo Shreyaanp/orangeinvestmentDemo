@@ -1,0 +1,180 @@
+{
+ "incident_text": "Portfolio updates are not arriving for about half of users since 11:20. Ops sees the dead-letter queue growing.",
+ "limits": {
+  "max_rounds": 3,
+  "max_tool_calls": 70,
+  "max_tokens": 600000,
+  "max_seconds": 420.0,
+  "margin": 0.25,
+  "min_confidence": 0.4,
+  "contra_weight": 1.25,
+  "contra_limit": 0.75,
+  "saturation": 2.0
+ },
+ "usage": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 23678,
+  "tokens_out": 6460
+ },
+ "round": 0,
+ "elapsed_s": 76.48848919999728,
+ "evidence": {
+  "E-001": {
+   "kind": "FACT",
+   "claim": "aa-sync deployed a payload-format change one minute before the first consumer errors",
+   "excerpt": "\"ts\":\"2026-04-02T11:19:00Z\",\"kind\":\"deploy\",\"service\":\"aa-sync\",\"ref\":\"aa-sync-00633\",\"note\":\"normalize holdings payload v2\"",
+   "source_call_id": "B-11",
+   "service": "aa-sync",
+   "ts": "2026-04-02T11:19:00Z",
+   "ref": "e1",
+   "id": "E-001",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-002": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer rejects messages on a field-name mismatch, starting right after the deploy",
+   "excerpt": "2026-04-02T11:20:04Z ERROR portfolio-consumer: schema validation failed: unexpected field 'positions' (expected 'holdings')",
+   "source_call_id": "B-13",
+   "service": "portfolio-consumer",
+   "ts": "2026-04-02T11:20:04Z",
+   "ref": "e2",
+   "id": "E-002",
+   "author": "reasoning",
+   "reliability": 0.8,
+   "flags": [
+    "truncated"
+   ]
+  },
+  "E-003": {
+   "kind": "FACT",
+   "claim": "aa-sync publishes to portfolio-updates and portfolio-consumer consumes from it",
+   "excerpt": "{\"direction\":\"published_by\",\"name\":\"aa-sync\",\"weight\":null},{\"direction\":\"consumed_by\",\"name\":\"portfolio-consumer\",\"weight\":null}",
+   "source_call_id": "B-12",
+   "service": "portfolio-updates",
+   "ts": "2026-04-02T11:50:00Z",
+   "ref": "e3",
+   "id": "E-003",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-004": {
+   "kind": "FACT",
+   "claim": "The dead-letter queue grew to 2500 on the portfolio-updates queue",
+   "excerpt": "\"metric\":\"dlq\",\"stats\":{\"min\":0.0,\"max\":2500.0,\"mean\":645.833,\"last\":2500.0,\"missing\":0}",
+   "source_call_id": "B-09",
+   "service": "portfolio-updates",
+   "ts": "2026-04-02T11:50:00Z",
+   "ref": "e4",
+   "id": "E-004",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-005": {
+   "kind": "FACT",
+   "claim": "Redeliveries rose sharply, consistent with repeated rejection",
+   "excerpt": "\"metric\":\"redeliveries\",\"stats\":{\"min\":0.233,\"max\":23.951,\"mean\":11.976,\"last\":22.332,\"missing\":0}",
+   "source_call_id": "B-09",
+   "service": "portfolio-updates",
+   "ts": "2026-04-02T11:50:00Z",
+   "ref": "e5",
+   "id": "E-005",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-006": {
+   "kind": "FACT",
+   "claim": "Publish rate stayed steady while consume rate fell, so this is not a producer outage",
+   "excerpt": "\"metric\":\"consume_rate\",\"stats\":{\"min\":18.483,\"max\":49.882,\"mean\":34.582,\"last\":18.483,\"missing\":0}",
+   "source_call_id": "B-09",
+   "service": "portfolio-updates",
+   "ts": "2026-04-02T11:50:00Z",
+   "ref": "e6",
+   "id": "E-006",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-007": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer error rate rose to 0.604 while latency stayed flat, which points to validation rejects rather than slowness",
+   "excerpt": "\"metric\":\"err_rate\",\"stats\":{\"min\":0.002,\"max\":0.604,\"mean\":0.298,\"last\":0.604,\"missing\":0}",
+   "source_call_id": "B-10",
+   "service": "portfolio-consumer",
+   "ts": "2026-04-02T11:50:00Z",
+   "ref": "e7",
+   "id": "E-007",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  },
+  "E-008": {
+   "kind": "FACT",
+   "claim": "portfolio-consumer also had a deploy at 10:50, described as a log level tweak, well before onset",
+   "excerpt": "\"ts\":\"2026-04-02T10:50:00Z\",\"kind\":\"deploy\",\"service\":\"portfolio-consumer\",\"ref\":\"portfolio-consumer-00091\",\"note\":\"log level tweak\"",
+   "source_call_id": "B-11",
+   "service": "portfolio-consumer",
+   "ts": "2026-04-02T10:50:00Z",
+   "ref": "e8",
+   "id": "E-008",
+   "author": "reasoning",
+   "reliability": 1.0,
+   "flags": []
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "id": "H1",
+   "statement": "aa-sync-00633 changed the published holdings payload (field 'holdings' renamed to 'positions'). portfolio-consumer's strict schema rejects these messages, which are then redelivered and dead-lettered.",
+   "component": "aa-sync",
+   "cause_type": "breaking_message_schema_change",
+   "supporting": [
+    "E-001",
+    "E-002",
+    "E-003",
+    "E-004",
+    "E-005",
+    "E-006",
+    "E-007"
+   ],
+   "contradicting": [],
+   "compatible_with": [
+    "H2"
+   ],
+   "status": "active"
+  },
+  "H2": {
+   "id": "H2",
+   "statement": "portfolio-consumer-00091 (10:50, 'log level tweak') contributed to the failure. This is unlikely given the 30-minute gap before onset and the nature of the change.",
+   "component": "portfolio-consumer",
+   "cause_type": "consumer_deploy_regression",
+   "supporting": [
+    "E-008"
+   ],
+   "contradicting": [
+    "E-001",
+    "E-002"
+   ],
+   "compatible_with": [
+    "H1"
+   ],
+   "status": "active"
+  }
+ },
+ "tasks": {},
+ "challenges": {},
+ "gaps": [],
+ "notes": [
+  "Why only about half of users are affected: a partial aa-sync rollout, a mix of payload types, or only some message types changed. This was not verified.",
+  "The log sample covers only 30 of 180 matching errors, so I did not check whether other error types exist later in the window.",
+  "Whether messages with the old 'holdings' field are still being processed successfully was not verified.",
+  "portfolio-consumer-00091 is very likely unrelated, but its diff was not inspected."
+ ],
+ "rejected": []
+}

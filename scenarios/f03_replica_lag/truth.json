@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "postgres",
+      "cause_type": "read_replica_lag",
+      "description": "The postgres read replica fell minutes behind the primary (replication lag), so portfolio reads served from it return holdings that predate recent trades.",
+      "onset": "2026-05-08T09:58:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "postgres",
+          "level": "WARN",
+          "contains": "replica pg-replica-1 apply lag",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-08T09:58:00Z",
+          "end": "2026-05-08T11:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "a past incident with the same symptom blamed the cache; a postgres migration ran earlier and finished cleanly"
+}

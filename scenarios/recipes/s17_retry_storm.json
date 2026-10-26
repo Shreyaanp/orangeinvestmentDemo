@@ -1,0 +1,30 @@
+{
+  "id": "s17_retry_storm",
+  "seed": 17,
+  "start": "2026-04-03T13:00:00Z",
+  "minutes": 120,
+  "incident_at_min": 85,
+  "incident_text": "Order placement is failing for many customers and the broker integration looks overloaded. Started around 14:00.",
+  "faults": [
+    {
+      "id": "F1", "role": "primary", "at_min": 60,
+      "truth": {"component": "order-router", "cause_type": "retry_storm_no_backoff", "description": "order-router retries failed broker calls immediately without backoff (a retry storm), overloading broker-gateway after a brief broker blip that had already recovered."},
+      "effects": [
+        {"target": "order-router", "metric": "rps", "op": "mul", "value": 3, "ramp_min": 3},
+        {"target": "broker-gateway", "metric": "rps", "op": "mul", "value": 1.8, "ramp_min": 3},
+        {"target": "order-router", "metric": "err_rate", "op": "add", "value": 0.25, "ramp_min": 4, "after_min": 2},
+        {"target": "broker-gateway", "metric": "latency_ms", "op": "mul", "value": 4, "ramp_min": 4, "after_min": 2},
+        {"target": "broker-gateway", "metric": "err_rate", "op": "add", "value": 0.3, "ramp_min": 4, "after_min": 2}
+      ],
+      "logs": [
+        {"service": "order-router", "level": "WARN", "msg": "retrying place_order immediately (attempt 5) without backoff", "per_min": 20},
+        {"service": "order-router", "level": "ERROR", "msg": "retry budget exhausted for broker call", "per_min": 2, "after_min": 4, "decisive": false}
+      ]
+    },
+    {
+      "id": "D1", "role": "distractor", "at_min": 58, "until_min": 62,
+      "logs": [{"service": "broker-gateway", "level": "ERROR", "msg": "upstream broker returned 503 service unavailable", "per_min": 4}]
+    }
+  ],
+  "trap": "a short broker blip triggered the storm but already recovered; the sustained overload comes from missing retry backoff"
+}

@@ -1,0 +1,37 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "web-app",
+      "cause_type": "bad_deploy_client_contract",
+      "description": "A web-app release (new account switcher) sends portfolio requests without the required account_id, so portfolio-svc rejects them with 400 and the page errors.",
+      "onset": "2026-05-11T14:00:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "portfolio-svc",
+          "level": "WARN",
+          "contains": "rejected request from web-app/5.2.0: 400 missing required parameter 'account_id'",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-11T14:00:00Z",
+          "end": "2026-05-11T15:00:00Z"
+        },
+        {
+          "kind": "change",
+          "service": "web-app",
+          "level": null,
+          "contains": "web-app-00512",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-05-11T13:59:00Z",
+          "end": "2026-05-11T15:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "the errors are logged by the callee (portfolio-svc, which also deployed recently) but the cause is the caller's release"
+}

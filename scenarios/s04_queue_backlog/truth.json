@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "aa-sync",
+      "cause_type": "cpu_throttling",
+      "description": "aa-sync was CPU-throttled so its latency rose several-fold; the downstream consumer slowed and the portfolio-updates queue backed up, delaying notifications.",
+      "onset": "2026-03-17T09:55:00Z",
+      "decisive": [
+        {
+          "kind": "log",
+          "service": "aa-sync",
+          "level": "WARN",
+          "contains": "request processing slow: p95",
+          "metric": null,
+          "min_value": null,
+          "start": "2026-03-17T09:55:00Z",
+          "end": "2026-03-17T11:00:00Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "benign broker memory alarm earlier in the window, already cleared"
+}

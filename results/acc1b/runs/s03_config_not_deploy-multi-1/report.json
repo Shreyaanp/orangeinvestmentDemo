@@ -1,0 +1,461 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most probable root cause is the 11:00 UTC config change that lowered broker-gateway BROKER_TIMEOUT_MS from 3000 to 800 ms. Broker-gateway's first timeout abort at 800 ms appears at 11:00:08, its error rate jumped from about 0.006 to 0.115 and then 0.225 in the same minutes, and order-router and orchestrator errors rose at the same time. Every orchestrator error is a broker-gateway 503, and no other change or service fits the onset. Weak spots remain: logs do not show how long the broker actually took, order-router's 503 is logged about 7 s before the first abort, and mean latency fell rather than rose after the change. The wa-webhook and msg-delivery deploys and the later postgres deploy are unlikely causes. External broker degradation (H2) is not supported by the evidence and is not excluded.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "The 11:00 config change lowering broker-gateway BROKER_TIMEOUT_MS from 3000 to 800 ms makes broker calls that previously completed slowly abort at 800 ms, so broker-gateway fails calls from order-router (and orchestrator) with HTTP 503, producing intermittent order failures and trade-confirmation timeouts.",
+   "component": "broker-gateway",
+   "cause_type": "configuration_change_timeout_reduction",
+   "score": 4.65,
+   "confidence": 0.699,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "A config change lowered broker-gateway BROKER_TIMEOUT_MS from 3000 to 800 ms at 11:00:00, matching the reported onset.",
+     "evidence_ids": [
+      "E-025",
+      "E-020"
+     ]
+    },
+    {
+     "text": "Broker-gateway's first ERROR is an 800 ms timeout abort at 11:00:08. Every ERROR line in the WARN+ result is this abort, with no upstream 5xx or connection errors, and the aborts continue to the end of the queried window.",
+     "evidence_ids": [
+      "E-042",
+      "E-043",
+      "E-082"
+     ]
+    },
+    {
+     "text": "Broker-gateway error rate was 0.003-0.007 before onset, rose to 0.115 at 11:00 and 0.225 at 11:01, and was still elevated at 11:59 with no sign of recovery or revert.",
+     "evidence_ids": [
+      "E-050",
+      "E-051",
+      "E-052"
+     ]
+    },
+    {
+     "text": "Order-router error rate stepped up in the same minute as broker-gateway (0.004 to 0.086 to 0.173), so order-router errors did not lead broker-gateway errors. Its first error is a broker-gateway HTTP 503 at 11:00:01.",
+     "evidence_ids": [
+      "E-053",
+      "E-001"
+     ]
+    },
+    {
+     "text": "Order-router is the heaviest caller of broker-gateway (0.8) and orchestrator also calls it (0.3), so one broker-side change reaches both paths. Every orchestrator ERROR is a broker-gateway 503, and none names another dependency.",
+     "evidence_ids": [
+      "E-026",
+      "E-028",
+      "E-064",
+      "E-063"
+     ]
+    },
+    {
+     "text": "The timeouts are roughly 5 per minute, which fits intermittent failures rather than a full outage. This is a rough rate from the total count. It is likely that the 800 ms limit now aborts slow broker responses that the 3000 ms limit used to tolerate. Nine 'responded slowly once' warnings before onset are consistent with this, but they carry no durations and this is not verified.",
+     "evidence_ids": [
+      "E-087",
+      "E-083",
+      "E-060",
+      "E-033"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Broker-gateway's mean latency never approaches 800 ms (max 230 ms) and dropped at 11:00. Logs do not record actual broker response durations, so the slow tail implied by the timeouts is not observed. The drop may reflect how the metric is defined (for example, counting only completed calls), but that is unverified.",
+     "evidence_ids": [
+      "E-047",
+      "E-046",
+      "E-055",
+      "E-059",
+      "E-085"
+     ]
+    },
+    {
+     "text": "Order-router's first 503 (11:00:01) is logged about 7 s before broker-gateway's first abort (11:00:08). This may be clock skew or a different failure path and is not explained.",
+     "evidence_ids": [
+      "E-066",
+      "E-086"
+     ]
+    },
+    {
+     "text": "The mapping from broker-gateway aborts to the HTTP 503s seen by callers is inferred, not visible in logs. Aborts do not name the caller, and order-router logs were not queried beyond the first lines.",
+     "evidence_ids": [
+      "E-048",
+      "E-068",
+      "E-069"
+     ]
+    },
+    {
+     "text": "Order-router latency showed no step at onset, so it does not directly show customer-facing delay.",
+     "evidence_ids": [
+      "E-056",
+      "E-005"
+     ]
+    }
+   ]
+  },
+  {
+   "rank": 2,
+   "hypothesis_id": "H2",
+   "statement": "The external broker is itself degraded and responds slowly or fails, so broker-gateway returns errors independently of the timeout change, and the 11:00 config change is coincidental.",
+   "component": "broker-gateway",
+   "cause_type": "external_broker_degradation",
+   "score": 0.0,
+   "confidence": 0.0,
+   "label": "low",
+   "supporting": [
+    {
+     "text": "Nine 'responded slowly once' warnings before onset show the broker was occasionally slow before the change. This is weak support for upstream slowness, and it is also consistent with H1.",
+     "evidence_ids": [
+      "E-057",
+      "E-044"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "Broker-gateway errors were absent before 11:00 and begin within seconds of the config change. Every returned ERROR is the 800 ms timeout abort, with no upstream 5xx or connection errors, so the evidence does not show the broker failing on its own.",
+     "evidence_ids": [
+      "E-051",
+      "E-043",
+      "E-042"
+     ]
+    },
+    {
+     "text": "Broker-gateway rate-limit headroom stayed high, so rate-limit exhaustion is not the cause. The external broker is not in the topology and its health was not checked, so H2 is not excluded.",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "order-router's first ERROR in the window is a broker-gateway call failure returning HTTP 503, at the reported onset time.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "order-router latency averaged 180.842 ms with a max of 194.176 ms over the window, which is not timeout-scale. The metrics do not show latency explaining the customer timeouts.",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "broker-gateway rate_limit_remaining never dropped below about 851, so rate-limit exhaustion does not appear to be the cause.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  },
+  {
+   "text": "broker-gateway configuration change lowering the broker timeout, at the reported onset of about 11:00 UTC",
+   "evidence_ids": [
+    "E-020"
+   ]
+  },
+  {
+   "text": "A config change lowered broker-gateway's broker timeout from 3000 ms to 800 ms at 11:00 UTC, matching the incident onset.",
+   "evidence_ids": [
+    "E-025"
+   ]
+  },
+  {
+   "text": "order-router is the heaviest synchronous caller of broker-gateway (weight 0.8). Its other calls are postgres (0.3), with web-app calling it (0.5).",
+   "evidence_ids": [
+    "E-026"
+   ]
+  },
+  {
+   "text": "broker-gateway is called by both order-router (0.8) and orchestrator (0.3), so a broker-side timeout change reaches both paths.",
+   "evidence_ids": [
+    "E-028"
+   ]
+  },
+  {
+   "text": "Broker-gateway's first ERROR in the window is a timeout abort at 800 ms, at 11:00:08Z, roughly 8 seconds after the 11:00:00 config change.",
+   "evidence_ids": [
+    "E-042"
+   ]
+  },
+  {
+   "text": "The broker-gateway WARN+ query returned 159 lines, not truncated and not partial. Every ERROR line in the returned set is the 800 ms timeout abort; none is an upstream 5xx or connection error.",
+   "evidence_ids": [
+    "E-043"
+   ]
+  },
+  {
+   "text": "Before 11:00, broker-gateway logged five WARN lines saying the broker responded slowly once (10:30 to 10:59). These are warnings with no latency value, and they do not show timeouts.",
+   "evidence_ids": [
+    "E-044"
+   ]
+  },
+  {
+   "text": "latency_ms dropped from about 216 ms to about 134 ms at the 11:00 sample, the same time the timeout aborts begin.",
+   "evidence_ids": [
+    "E-046"
+   ]
+  },
+  {
+   "text": "The whole-window latency_ms summary has max 230.422 and mean 175.599. Neither reaches the 800 ms timeout, so the mean does not show the slow tail that the timeouts imply.",
+   "evidence_ids": [
+    "E-047"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate was low before onset (0.006 at 10:59) and jumped at 11:00 (0.115), then reached 0.225 at 11:01 and stayed there.",
+   "evidence_ids": [
+    "E-050"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate stayed in the 0.003-0.006 range across 10:00-10:59, with its window minimum at 10:38, so the pre-onset metric shows no elevated errors.",
+   "evidence_ids": [
+    "E-051"
+   ]
+  },
+  {
+   "text": "broker-gateway err_rate was still elevated at the end of the window (11:59), with no sign of a revert or recovery in the metric.",
+   "evidence_ids": [
+    "E-052"
+   ]
+  },
+  {
+   "text": "order-router err_rate moved from 0.004 at 10:59 to 0.086 at 11:00 and 0.173 at 11:01, the same minute as the broker-gateway step, so order-router errors did not lead broker-gateway errors.",
+   "evidence_ids": [
+    "E-053"
+   ]
+  },
+  {
+   "text": "broker-gateway latency_ms dropped from about 216 ms before onset to about 133 ms at 11:00 and stayed in the 124-142 ms range through 11:59, at the same minute the error rate rose.",
+   "evidence_ids": [
+    "E-055"
+   ]
+  },
+  {
+   "text": "order-router latency_ms did not change at onset: it was about 187 ms at 10:59 and about 190 ms at 11:00, so order-router latency does not show a step at 11:00.",
+   "evidence_ids": [
+    "E-056"
+   ]
+  },
+  {
+   "text": "broker-gateway logged 9 WARN lines reading 'responded slowly once' between 10:14:53 and 10:59:50, all before onset. The query had WARN as the minimum level, so no ERROR lines appeared in 10:00-11:00 either.",
+   "evidence_ids": [
+    "E-057"
+   ]
+  },
+  {
+   "text": "orchestrator's first broker-related ERROR in the window is a 503 from broker-gateway, 23 s after broker-gateway's first logged abort.",
+   "evidence_ids": [
+    "E-063"
+   ]
+  },
+  {
+   "text": "Every ERROR line returned for orchestrator in 10:30-11:30 is a broker-gateway 503. No orchestrator error names llm-gateway, portfolio-svc, market-data or auth-kyc. The result was not truncated.",
+   "evidence_ids": [
+    "E-064"
+   ]
+  },
+  {
+   "text": "order-router's first broker-gateway 503 is logged at 11:00:01, about 7 s before broker-gateway's first logged timeout abort at 11:00:08. This ordering is suspicious and could reflect log timing or clock skew rather than causation.",
+   "evidence_ids": [
+    "E-066"
+   ]
+  },
+  {
+   "text": "The timeout errors continue to the end of the queried window, with the last at 11:29:45Z.",
+   "evidence_ids": [
+    "E-082"
+   ]
+  },
+  {
+   "text": "The ERROR query returned 150 matching lines with no truncation or partial result, so the count is complete for that filter.",
+   "evidence_ids": [
+    "E-083"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The 800 ms timeout is probably shorter than normal broker response times, so order-router and orchestrator calls to broker-gateway would start timing out from 11:00. This would explain intermittent failures better than the deploys, but latency data is needed to confirm it.",
+   "evidence_ids": [
+    "E-033"
+   ]
+  },
+  {
+   "text": "The 800 ms abort is the most likely cause of the 503s seen by order-router. The HTTP 503 mapping is not visible in broker-gateway logs, and order-router's logs were not queried for this task.",
+   "evidence_ids": [
+    "E-048"
+   ]
+  },
+  {
+   "text": "The drop in broker-gateway latency at 11:00 may come from how the metric is defined (for example, only successful calls are counted, or timed-out calls return quickly) rather than from faster broker responses. This is not verified; the metric definition was not checked.",
+   "evidence_ids": [
+    "E-059"
+   ]
+  },
+  {
+   "text": "The 9 pre-onset 'responded slowly once' lines are consistent with the 3000 ms timeout masking slow broker responses before 11:00, and the 800 ms timeout would turn those into errors. The log lines give no durations, so this is not verified.",
+   "evidence_ids": [
+    "E-060"
+   ]
+  },
+  {
+   "text": "The 800 ms broker timeout is what causes the orchestrator and order-router 503s. broker-gateway's abort lines do not name the caller, so individual aborts cannot be matched to order-router or orchestrator requests.",
+   "evidence_ids": [
+    "E-068"
+   ]
+  },
+  {
+   "text": "Orchestrator's 503 errors are the caller-facing result of broker-gateway's timeout aborts. The broker-gateway log says 'aborted' rather than '503', so the status mapping is inferred.",
+   "evidence_ids": [
+    "E-069"
+   ]
+  },
+  {
+   "text": "The 800 ms in the log line is the configured limit, not a measured latency. It matches the 3000 ms to 800 ms config change in E-025, but the log does not show how long the broker actually took, so slow broker responses are inferred rather than observed.",
+   "evidence_ids": [
+    "E-085"
+   ]
+  },
+  {
+   "text": "Ordering is suspicious: E-001 places order-router's broker-gateway 503 at 11:00:01, but broker-gateway's first abort log is at 11:00:08. The caller reports a failure before the callee logs one, so this may be clock skew or the 503 may come from a different path. It should not be read as proof that the caller is the cause.",
+   "evidence_ids": [
+    "E-086"
+   ]
+  },
+  {
+   "text": "Roughly 150 timeouts over 30 minutes is about 5 per minute, which fits the 'intermittent' customer reports better than a complete outage. This is a rough rate from the total count, not a per-minute measurement.",
+   "evidence_ids": [
+    "E-087"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Actual broker response durations are not logged, so it is unverified whether broker responses are slow or the timeout is simply too low.",
+  "The 11:00:01 order-router 503 precedes broker-gateway's first abort at 11:00:08. Whether this is clock skew or a different failure path is unknown.",
+  "The 503 mapping from broker-gateway aborts is inferred. Order-router logs were not queried in depth, and aborts do not name the caller.",
+  "The latency drop at 11:00 is unexplained, and the metric definition and p50/p95/p99 data are unavailable.",
+  "Log timeout lines are far fewer than the error rate implies. The error-rate denominator is unknown, and failures with other wording may be missed by the 'timeout' filter.",
+  "Broker-gateway log coverage after about 11:15-11:18 is incomplete or partial in some queries.",
+  "The external broker's health is unchecked, so H2 is not ruled out.",
+  "Several query_metrics calls failed with invalid_input (resolved later), and the call budget was exhausted before dependency and queue checks, such as RabbitMQ queue depth, could be completed.",
+  "The author and source of the config change are unknown. Whether the change was reverted is unknown, though metrics show no recovery through 11:59.",
+  "Assumption-based items are unverified: the 'last' metric values being sampled near 12:00, the rough 5 per minute rate, and the mix-effect explanation for the latency drop.",
+  "No time-series points were requested, so metric onset and recovery cannot be placed in time, and the earliest deviation across services is not established.",
+  "No prior-day baseline was queried, so 'deviation' for latency and error rate is not measured against a reference.",
+  "Only min/max/mean/last summaries were returned. p50/p95/p99 latency, which the task asked for, was not obtained.",
+  "No broker-gateway, orchestrator, or wa-webhook logs were queried, so their error messages, timeout types and status codes are unknown. The only error text found is order-router's HTTP 503.",
+  "Nothing has been broken down by user, request type or instance, so intermittency by those dimensions is untested.",
+  "The query budget (5 calls) was used up, so the 10:00-10:30 and 11:30-12:00 log ranges were not checked, and the order-router WARN/ERROR sequence there is only partly covered.",
+  "No time-series points were requested, so none of the metric summaries can be placed against the 11:00 onset or compared in time with the order failures.",
+  "rabbitmq queue depth, consumer count, publish/consume rate, message age, redelivery and dead-letter counts are not exposed by the metric set returned; queue health for inbound-msgs, outbound-msgs and portfolio-updates is unverified.",
+  "redis-cache connection errors and postgres pool in-use/active connections, locks and slow-query text were not returned by the metric or log queries.",
+  "market-data was queried only at WARN level with 'timeout' as the filter; the empty result does not prove there were no timeouts, since ERROR-level lines, other wording, and the window edges were not checked.",
+  "auth-kyc and llm-gateway logs were not queried, and the orchestrator-to-dependency retry picture is unverified.",
+  "Call budget (about 5) was exhausted, so the remaining checks could not be run.",
+  "The change feed lists no author or source for any item (source is null), so who made the broker-gateway change is unknown.",
+  "No changes were returned for orchestrator, llm-gateway, portfolio-svc, aa-sync, order-router, market-data, auth-kyc, portfolio-consumer, web-app, redis-cache, postgres or rabbitmq in the window. This may mean none changed, or that the feed does not cover them.",
+  "No credential, certificate, scaling or third-party broker or account-aggregator settings changes appear in the feed. Those may be recorded elsewhere or not at all.",
+  "I did not call get_dependencies, so I have not confirmed which services call broker-gateway or whether the 10:40 wa-webhook change feeds into order placement.",
+  "No get_dependencies results for wa-webhook, llm-gateway, portfolio-svc, auth-kyc, market-data, aa-sync, msg-delivery, portfolio-consumer, postgres, redis-cache or rabbitmq. Their callers, callees and queue links are unknown.",
+  "No configured retries or per-hop timeouts were returned for any edge except the broker timeout change. Sync vs async is known only for queue links.",
+  "No consumer of portfolio-updates or publisher of inbound-msgs was identified. Trade confirmation's async path is unmapped.",
+  "The external broker and account aggregator are not in the topology results, so their latency and health could not be checked.",
+  "The call budget (4) was used up. A follow-up on broker-gateway, rabbitmq and postgres dependencies would be needed to close these gaps.",
+  "I did not call get_changes or get_dependencies, so I could not check whether an order-router, broker-gateway or redis-cache change happened near the 11:00 UTC onset, or how the services are connected.",
+  "search_incidents returned only three distinct incidents, and INC-0431 appeared for several different queries, which suggests a small or narrow index. Queries on queue backlog, cache saturation and broker-gateway latency found no distinct matches, so absence of matches is not evidence that such incidents never occurred.",
+  "Past incident results had null source and url fields and date-only timestamps, so I could not verify their full details or the time of day they occurred.",
+  "No past incident covered RabbitMQ backlog or postgres saturation, so those hypotheses have no historical comparison.",
+  "No p50, p95 or p99 series exists for broker-gateway. Only one latency_ms metric (5-minute points) was returned, so tail latency above 800 ms cannot be measured directly.",
+  "Points are sampled every 5 minutes, so a short burst above 800 ms between samples could be hidden. The WARN 'responded slowly' lines carry no latency values.",
+  "No broker-gateway metric for upstream 5xx or connection errors, and no per-status breakdown, so the 503 mapping cannot be checked from broker-gateway data alone.",
+  "The 11:00 latency drop could reflect how the metric is computed (completed calls only versus all calls). The metric definition was not available to check this.",
+  "order-router logs were not queried in this task, so the link from broker-gateway timeouts to order-router's 503s rests on E-001 plus the timing match.",
+  "No config history or rollback data for cfg-broker-timeout-ms was available through my tools (query_logs and query_metrics only). I could not check whether the timeout was reverted or whether errors dropped after any revert; the metrics show no drop through 11:59.",
+  "broker-gateway logs were queried only for 10:00-11:00. Post-onset timeout or slow-response lines from 11:00 onward were not checked.",
+  "No order-router logs were queried, so the order-router error messages and their timeout reasons are not confirmed here.",
+  "Metrics are at 1-minute resolution. Sub-minute ordering between the broker-gateway config change at 11:00:00 and the first errors is unresolved.",
+  "The broker-gateway latency metric definition is unknown, and the metrics report means only, not percentiles or timeout counts. Customer-visible timeouts cannot be quantified from these results.",
+  "Two latency queries failed on the first attempt because the metric name was wrong ('latency'). I retried with the correct name, 'latency_ms'. Together with the first 5 calls, I used 7 calls, which is above the approximate budget of 5.",
+  "BROKER_TIMEOUT_MS scope on the order-router path is not confirmed. The log search returned nothing, and config/dependency data was not queried by this agent.",
+  "The broker-gateway result (T8-03) was truncated at 155 total. Only 100 lines covering 10:55 to 11:18:53 were returned, so 11:18:53-11:30 is unseen.",
+  "llm-gateway, portfolio-svc, market-data and auth-kyc logs were not queried directly. The exclusion of those services rests only on orchestrator's error lines.",
+  "The 11:00:01 order-router 503 precedes broker-gateway's first logged abort at 11:00:08. The cause of this ordering (log timing, clock skew, or a different failure) is unverified.",
+  "No orchestrator WARN/ERROR lines were checked for the 10:30-11:00 baseline beyond the returned set; the session 'resumed after idle' WARNs before onset were not analysed.",
+  "No p50, p95 or p99 latency metrics exist for broker-gateway in the metric summary (only latency_ms mean, with max 229.865), so the percentile time series requested by the task could not be built.",
+  "Log timeout lines (75 in 11:00–11:15) are much fewer than the err_rate of about 0.225 at about 40 rps would suggest (roughly 9 failures per second). The err_rate denominator and whether all failures log the 'timeout' text are unverified. The 'contains: timeout' filter would also miss failures with other wording, such as the HTTP 503 that order-router reports.",
+  "The log query covered only 10:55–11:15 and was not run after 11:15, so the timeout-abort pattern after 11:15 is not verified. The 11:00–11:59 err_rate points show elevation, but log evidence for the rest of the window is missing.",
+  "Metric values are one-minute samples and the time series was not checked for a sub-minute spike at 11:00:00; the 0.115 value is an averaged minute, not a per-call measurement.",
+  "No per-call latency distribution is available, so the 'failing calls cluster just above 800 ms' question cannot be answered from these sources.",
+  "The logs do not record broker response durations or elapsed time before abort, so whether broker responses were slow (versus the timeout being set too low) cannot be confirmed from these logs.",
+  "The ERROR-level line count (150) does not show the number of trades affected. Matching these aborts to order or trade IDs would need order-router or orchestrator logs, which I did not query.",
+  "I did not check whether the 503 that order-router reports (E-001) corresponds to these broker-gateway aborts, because order-router logs were outside this task.",
+  "The query filtered on level and the text 'timeout' only. broker-gateway INFO/DEBUG lines (for example, request-level timings) were not checked, so there may be more context about response times."
+ ],
+ "actions": [
+  {
+   "text": "Revert broker-gateway BROKER_TIMEOUT_MS (cfg-broker-timeout-ms) from 800 ms to 3000 ms, or to a value validated against broker response times, and watch broker-gateway, order-router and orchestrator error rates for recovery.",
+   "rationale": "The change coincides with the onset and the first timeout aborts, and errors have not recovered through 11:59. Recovery after the revert would also confirm the cause.",
+   "evidence_ids": [
+    "E-025",
+    "E-042",
+    "E-052",
+    "E-054"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Check order-router logs and broker-gateway INFO/DEBUG request timings after 11:15 to confirm that the 503s correspond to the 800 ms aborts and to see actual broker response durations.",
+   "rationale": "This closes the gaps on the 503 mapping, the 11:00:01 vs 11:00:08 ordering, and whether broker responses really exceed 800 ms.",
+   "evidence_ids": [
+    "E-066",
+    "E-048",
+    "E-085"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Get p95/p99 broker-gateway latency, including timed-out calls, and check the metric definition. Use them to choose a safe timeout value before any future reduction.",
+   "rationale": "Only mean latency is available, and it fell after the change, so the real tail relative to 800 ms is unknown.",
+   "evidence_ids": [
+    "E-047",
+    "E-059",
+    "E-079"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add a review or canary step and alerting for broker-gateway timeout changes. Record the author of config changes.",
+   "rationale": "A single timeout change went out with no visible safeguard, and the change feed has no author or source for it.",
+   "evidence_ids": [
+    "E-025",
+    "E-050"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Check external broker health and latency, and investigate the pre-onset 'responded slowly' warnings.",
+   "rationale": "This would rule H2 in or out, and it shows whether the broker is slow enough to need a larger timeout.",
+   "evidence_ids": [
+    "E-057",
+    "E-044"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 39,
+  "tool_attempts": 39,
+  "llm_calls": 34,
+  "tokens_in": 322594,
+  "tokens_out": 62145,
+  "rounds": 2,
+  "elapsed_s": 306.9
+ },
+ "dropped_claims": 0
+}

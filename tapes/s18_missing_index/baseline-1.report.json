@@ -1,0 +1,164 @@
+{
+ "status": "ANSWER",
+ "status_reason": "clear leader with sufficient evidence",
+ "summary": "The most likely cause is migration mig-20260406-0042 on postgres at 10:39 UTC, which rebuilt the holdings table without recreating its indexes. Queries against holdings now run as full scans, which would explain the slow queries and connection pool waits that began around 10:40. postgres shows pool_waiting up to 45 and slow_queries up to 60, both at their maximum in the latest sample. portfolio-svc (0.8 call weight), aa-sync (0.7) and order-router (0.3) all call postgres, so the portfolio pages and syncs are downstream effects. Two gaps remain: I did not pull logs or time-series points to confirm the onset and the exact slow queries, and portfolio-svc's own metrics look fairly mild, so the user-facing impact is not fully quantified.",
+ "hypotheses": [
+  {
+   "rank": 1,
+   "hypothesis_id": "H1",
+   "statement": "Migration mig-20260406-0042 rebuilt the holdings table without recreating its indexes. Holdings queries became slow, held connections longer and exhausted the postgres pool, which slowed portfolio-svc and aa-sync.",
+   "component": "postgres",
+   "cause_type": "missing_indexes_after_migration",
+   "score": 4.05,
+   "confidence": 0.669,
+   "label": "medium",
+   "supporting": [
+    {
+     "text": "A postgres migration at 10:39 UTC rebuilt the holdings table without recreating its indexes, one minute before the reported onset.",
+     "evidence_ids": [
+      "E-001"
+     ]
+    },
+    {
+     "text": "postgres connection pool waiters peaked at 45, and the last sample is at that maximum.",
+     "evidence_ids": [
+      "E-002"
+     ]
+    },
+    {
+     "text": "postgres slow queries rose from about 1 to 60, and the last sample is at that maximum.",
+     "evidence_ids": [
+      "E-003"
+     ]
+    },
+    {
+     "text": "postgres latency rose to a maximum of 84 ms and was still high at the last sample, while error rate and replication lag stayed flat. This points to query slowness, not an outage or replication problem.",
+     "evidence_ids": [
+      "E-004"
+     ]
+    },
+    {
+     "text": "portfolio-svc, aa-sync and order-router all call postgres, so they are callers affected by it and not the origin.",
+     "evidence_ids": [
+      "E-005"
+     ]
+    },
+    {
+     "text": "Missing indexes on holdings force full scans, which makes queries slow, holds connections longer and exhausts the pool. This is inferred from the migration note and the slow-query and pool metrics, and has not been confirmed in logs or query plans.",
+     "evidence_ids": [
+      "E-007"
+     ]
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "portfolio-svc's own metrics over the window are only mildly elevated, with a maximum latency of about 183 ms and error rate up to 0.004. This does not clearly show the reported timeouts.",
+     "evidence_ids": [
+      "E-006"
+     ]
+    }
+   ]
+  }
+ ],
+ "facts": [
+  {
+   "text": "A postgres migration at 10:39 UTC rebuilt the holdings table without recreating its indexes, one minute before the reported onset.",
+   "evidence_ids": [
+    "E-001"
+   ]
+  },
+  {
+   "text": "postgres connection pool waiters peaked at 45, and the last sample is at that maximum.",
+   "evidence_ids": [
+    "E-002"
+   ]
+  },
+  {
+   "text": "postgres slow queries rose from about 1 to 60, and the last sample is at that maximum.",
+   "evidence_ids": [
+    "E-003"
+   ]
+  },
+  {
+   "text": "postgres latency rose to a maximum of 84 ms and was still high at the last sample, while error rate and replication lag stayed flat. This points to query slowness, not an outage or replication problem.",
+   "evidence_ids": [
+    "E-004"
+   ]
+  },
+  {
+   "text": "portfolio-svc, aa-sync and order-router all call postgres, so they are callers affected by it and not the origin.",
+   "evidence_ids": [
+    "E-005"
+   ]
+  },
+  {
+   "text": "portfolio-svc's own metrics over the window are only mildly elevated, with a maximum latency of about 183 ms and error rate up to 0.004. This does not clearly show the reported timeouts.",
+   "evidence_ids": [
+    "E-006"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "Missing indexes on holdings force full scans, which makes queries slow, holds connections longer and exhausts the pool. This is inferred from the migration note and the slow-query and pool metrics, and has not been confirmed in logs or query plans.",
+   "evidence_ids": [
+    "E-007"
+   ]
+  }
+ ],
+ "unresolved": [
+  "Logs were not queried, so the exact slow queries and any pool exhaustion errors are unconfirmed.",
+  "Time-series points were not pulled, so the onset time of pool_waiting and slow_queries relative to 10:39 is not verified.",
+  "portfolio-svc metrics look only mildly degraded, which conflicts with the reported timeouts. The affected endpoints, aa-sync health and broker-gateway behaviour were not examined.",
+  "Other holdings-table consumers, such as portfolio-consumer and the portfolio-updates queue, were not checked."
+ ],
+ "actions": [
+  {
+   "text": "Recreate the indexes on the holdings table that the migration dropped, building them concurrently, or roll back or fix migration mig-20260406-0042.",
+   "rationale": "This addresses the likely root cause of the slow queries and pool saturation, which began one minute after the migration.",
+   "evidence_ids": [
+    "E-001",
+    "E-003",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Identify the slow holdings queries using pg_stat_statements or EXPLAIN, and confirm they are sequential scans before and after the index rebuild.",
+   "rationale": "Logs and query plans were not checked, so the index hypothesis is not yet confirmed.",
+   "evidence_ids": [
+    "E-003",
+    "E-007"
+   ],
+   "priority": "immediate"
+  },
+  {
+   "text": "Watch pool_waiting and slow_queries on postgres, and latency on portfolio-svc and aa-sync, until they return to baseline.",
+   "rationale": "Confirms recovery and shows whether any remaining impact comes from a separate cause.",
+   "evidence_ids": [
+    "E-002",
+    "E-003",
+    "E-006"
+   ],
+   "priority": "follow_up"
+  },
+  {
+   "text": "Add a check to the migration process that verifies indexes exist after any table rebuild.",
+   "rationale": "The migration note explicitly says indexes were not recreated.",
+   "evidence_ids": [
+    "E-001"
+   ],
+   "priority": "follow_up"
+  }
+ ],
+ "stats": {
+  "tool_calls": 13,
+  "tool_attempts": 13,
+  "llm_calls": 5,
+  "tokens_in": 22817,
+  "tokens_out": 7327,
+  "rounds": 0,
+  "elapsed_s": 131.0
+ },
+ "dropped_claims": 0
+}

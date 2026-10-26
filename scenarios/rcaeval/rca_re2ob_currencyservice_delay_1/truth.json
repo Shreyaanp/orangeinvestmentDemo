@@ -1,0 +1,27 @@
+{
+  "faults": [
+    {
+      "id": "F1",
+      "role": "primary",
+      "component": "currencyservice",
+      "cause_type": "network_delay",
+      "description": "network delay injected into currencyservice (RE2-OB).",
+      "onset": "2024-01-19T22:06:52Z",
+      "decisive": [
+        {
+          "kind": "metric",
+          "service": "currencyservice",
+          "level": null,
+          "contains": "",
+          "metric": "latency-90",
+          "min_value": 0.0719,
+          "start": "2024-01-19T22:06:52Z",
+          "end": "2024-01-19T22:19:52Z"
+        }
+      ]
+    }
+  ],
+  "answerable": true,
+  "expected_status": "ANSWER",
+  "trap": "real telemetry (RE2-OB, network delay); no change events, no past incidents, per-second data averaged per minute"
+}
