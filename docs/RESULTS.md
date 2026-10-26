@@ -162,3 +162,45 @@ For the multi-agent team, memory and the catalogue added one correct answer and 
 small and the two features were switched on together, so this is directional, and their separate
 effects are not measured. A misleading look-alike memory was not tested live; offline tests show it
 cannot change the status or the confidence.
+
+## Real telemetry: RCAEval
+
+To check the system outside our own simulators, we imported four cases from
+[RCAEval](https://huggingface.co/datasets/phamquiluan/RCAEval), a public root-cause-analysis
+benchmark. All four come from the RE2 suite, which runs the Online Boutique microservices demo and
+injects a known fault while recording real metrics and logs.
+
+| case | injected fault (answer key) | data | run live |
+|---|---|---|---|
+| rca_re2ob_checkoutservice_cpu_1 | CPU saturation in checkoutservice | 17,132 log lines, 72 metric series | yes, 4 configurations |
+| rca_re2ob_currencyservice_delay_1 | network delay in currencyservice | 16,122 log lines, 76 metric series | not yet |
+| rca_re2ob_emailservice_mem_1 | memory exhaustion in emailservice | 17,738 log lines, 71 metric series | not yet |
+| rca_re2ob_productcatalogservice_loss_1 | packet loss in productcatalogservice | 11,974 log lines, 72 metric series | not yet |
+
+**Why it is a harder test.** The ticket is the same generic sentence for every case: "Shop users
+report slow pages and some failed requests since about HH:MM UTC." It names no service. The cases
+have 12 services, 25 minutes of data, **no deploys or config changes** and no past incidents, so
+there is no recent change to blame. The cause has to be found from metrics and logs alone. We did
+not generate this data. `src/scripts/import_rcaeval.py` converts it the same way for every case: it
+averages per-second metrics per minute, infers log levels from the message text, and keeps every
+warning and error line.
+
+**Results on the checkout CPU case.** One live run per configuration, scored against the
+benchmark's own label:
+
+| system | outcome | tokens | latency s | hallucinated evidence | decisive evidence cited |
+|---|---|---|---|---|---|
+| single-agent baseline (Opus) | correct | 67,702 | 103 | 0 | 1.0 |
+| multi-agent team (Sonnet + Opus) | correct | 406,035 | 248 | 0.05 | 1.0 |
+| multi-agent, lean + Sonnet only | correct | 238,421 | 151 | 0.07 | 1.0 |
+| hybrid (one investigator + Critic) | correct | 142,036 | 227 | 0.07 | 1.0 |
+
+Every configuration named checkoutservice and a CPU cause, and cited the decisive CPU metric. On
+real data the team needed 3 rounds and hit the 70-tool-call cap before answering; the baseline
+answered in one pass at about a sixth of the tokens.
+
+**Limits.** This is one live case, not a benchmark score. The other three cases have been
+imported, and the importer is covered by offline tests, but they have not been run live. Traces
+from RCAEval are not used, because our tools have no trace query. Sources:
+`results/exp_rca_*/scores.jsonl` and `results/hybrid1_rca/scores.jsonl`. Replay the multi-agent run
+offline with `python -m eval.demo rca_re2ob_checkoutservice_cpu_1`.
